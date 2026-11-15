@@ -26,6 +26,9 @@ open -a ~/Applications/Rex\ UI.app
 rexui load main
 ```
 
+> [!IMPORTANT]
+> Backends have **NO SANDBOX**! Please don't run random code from other repos w/o checking it 1st ty <3
+
 # r/unixporn xD
 
 <div align='center'>
@@ -49,6 +52,9 @@ rexui load main
 # Endfield
   
 </div>
+
+> [!NOTE]
+> Some things in Endfield MAY differ from the demo/screenshots due to DMCA && other "funny" stuff ^_^ 
 
 <img width="3440" height="1440" alt="image" src="assets/endfield-01.png" />
 
