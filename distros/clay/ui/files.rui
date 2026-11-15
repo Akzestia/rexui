@@ -1,0 +1,25 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "top"; height: 0; span: "window"; resizable: false
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var surface: light ? "#faf9f5" : "#1f1e1d"
+
+    Shortcut { key: "cmd+alt+e"; keyTitle: qsTr("Files in a pane"); onActivated: rex.openPane("files", { cwd: true }) }
+
+    onFilesChanged: browser.filesChanged(path)
+    onReveal: browser.reveal(paths)
+
+    Drawer {
+        id: panel
+        placement: "center"; rounding: 20; color: surface; animation: 420
+        width: 1120; height: 720
+        key: "cmd+shift+e"; keyTitle: qsTr("Files")
+        command: ["client.files"]
+        onOpenChanged: if (open) browser.start("")
+
+        FileBrowser { id: browser; grow: 1; closer: () => { panel.open = false } }
+    }
+}

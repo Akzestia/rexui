@@ -1,0 +1,27 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: GPL-3.0-only
+load("@chat_crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+exports_files(["Cargo.toml", "Cargo.lock"])
+
+genrule(
+    name = "sdk",
+    srcs = ["@rexui//backends/sdk/rust:rexui.rs"],
+    outs = ["src/rexui.rs"],
+    cmd = "cp $< $@",
+)
+
+rust_binary(
+    name = "rexui-chat",
+    srcs = glob(["src/**/*.rs"]) + [":sdk"],
+    crate_root = "src/main.rs",
+    edition = "2024",
+    deps = all_crate_deps(normal = True),
+)
+
+rust_test(
+    name = "rexui-chat_test",
+    crate = ":rexui-chat",
+    edition = "2024",
+)

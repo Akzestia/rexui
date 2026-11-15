@@ -1,0 +1,13 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
+objc_library(
+    name = "profile",
+    srcs = ["profile.mm"],
+    hdrs = ["profile.h"],
+    copts = ["-std=c++20", "-fobjc-arc"],
+    includes = [".."],
+    sdk_dylibs = ["libsqlite3"],
+    visibility = ["//visibility:public"],
+)

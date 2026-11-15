@@ -1,0 +1,943 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Column {
+    spacing: 0
+    color: bg
+    property bool framed: !debug.here.pane
+    radius: framed ? pr : 0
+    border.width: framed ? 1 : 0
+    border.color: line
+
+    property string me: "console.rui"
+    property bool dragging: false
+    function devFile(name) { return (debug.here.path || "").replace(/[^/]+$/, name); }
+    function popOut() { debug.openFloating(devFile(me), [0.12, 0.56, 0.76, 0.36]); }
+    function toPane() { debug.openInPane(devFile(me), "vertical", "after"); }
+    function openHere() { debug.openHere(devFile("Devtools.rui")); }
+    function backToDock() { debug.closePane(); }
+    function closeMe() {
+        if (debug.here.pane) { debug.closePane(); return; }
+        const other = me === "elements.rui" ? "console.rui" : "elements.rui";
+        if (debug.options["hidden " + other] || (debug.panedFiles || []).includes(other)) debug.toggle(false);
+        else debug.option("hidden " + me, true);
+    }
+    property var sides: [{ s: "left", i: "sidebar.left" }, { s: "bottom", i: "rectangle.bottomthird.inset.filled" },
+                         { s: "right", i: "sidebar.right" }, { s: "top", i: "rectangle.topthird.inset.filled" }]
+    function sideOf(f) { return debug.options["dock " + f] || (f === "elements.rui" ? "left" : "bottom"); }
+    property string mySide: sideOf(me)
+    property bool sideMenu: false
+    function dockTo(s) {
+        sideMenu = false;
+        const other = me === "elements.rui" ? "console.rui" : "elements.rui", was = sideOf(me);
+        if (s === was) return;
+        if (sideOf(other) === s) debug.option("dock " + other, was);
+        debug.option("dock " + me, s);
+    }
+    property bool on: debug.enabled
+    onOnChanged: if (!on && debug.here.pane) debug.closePane()
+
+    property var T: debug.theme || ({})
+    property bool dark: T.dark !== undefined ? !!T.dark : theme.dark
+    property var bg: T.bg || (dark ? "#f0131418" : "#f4f6f6f8")
+    property var raised: T.raised || (dark ? "#1d1f24" : "#ffffff")
+    property var hover: T.hover || (dark ? "#24272d" : "#eceef1")
+    property var line: T.line || (dark ? "#2a2d34" : "#dcdee2")
+    property var field: T.field || (dark ? "#15171b" : "#f0f1f3")
+    property var ink: T.ink || (dark ? "#e3e5e8" : "#1d1f23")
+    property var dim: T.dim || (dark ? "#8b9099" : "#6b7079")
+    property var faint: T.faint || (dark ? "#5c616b" : "#a3a7ae")
+    property var blue: T.accent || "#4f8cff"
+    property var onBlue: T.onAccent || "#ffffff"
+    property var selColor: T.selected || (dark ? "#1f3a66" : "#dbe7ff")
+    property var tagColor: T.tag || (dark ? "#c792ea" : "#8b3fc6")
+    property var idColor: T.id || (dark ? "#82aaff" : "#2f5fd0")
+    property var compColor: T.comp || (dark ? "#ffcb6b" : "#a86b00")
+    property var strColor: T.string || (dark ? "#c3e88d" : "#3c7a1d")
+    property var numColor: T.number || (dark ? "#f78c6c" : "#b4501e")
+    property var warnColor: T.warn || (dark ? "#ffcb6b" : "#a86b00")
+    property var errColor: T.error || "#ff5f56"
+    property var okColor: T.ok || (dark ? "#c3e88d" : "#3c7a1d")
+    property string uiFont: T.font || ""
+    property string monoFont: T.mono || ""
+    property var errTint: T.errorRow || (dark ? "#2a1517" : "#fdecec")
+    property var warnTint: T.warnRow || (dark ? "#2a2414" : "#fdf6e3")
+    property real r: T.radius !== undefined ? Number(T.radius) : 6
+    property var openLines: ({})
+    function toggleLine(n) { const o = Object.assign({}, openLines); o[n] = !o[n]; openLines = o; }
+    readonly property int foldLines: 8
+    readonly property int foldChars: 1200
+    readonly property int jsonFoldAt: 100
+    readonly property int jsonFoldTo: 20
+    function folded(parts, json) {
+        const out = [];
+        let left = json ? Infinity : foldChars;
+        const most = json ? jsonFoldTo : foldLines;
+        for (let i = 0; i < parts.length && i < most && left > 0; i++) {
+            const p = parts[i];
+            out.push(p.length > left ? p.slice(0, left) + "…" : p);
+            left -= p.length + 1;
+        }
+        return out;
+    }
+    function lead(s) { return /^ */.exec(s)[0]; }
+    property var jsColors: ({ comment: faint, string: strColor, keyword: tagColor, number: numColor, key: idColor, call: compColor })
+    property real pr: T.panelRadius !== undefined ? Number(T.panelRadius) : 12
+    property int fade: 120
+
+    property int tab: 0
+    property var tabs: ["Console", "Performance", "Files"]
+    property real tabW: 92
+    property int faded: -1
+    onTabChanged: { faded = -1; fadeIn.running = true; }
+    Timer { id: fadeIn; interval: 30; repeat: false; running: false; onTriggered: { faded = tab; running = false; } }
+    Component.onCompleted: fadeIn.running = true
+
+    property string level: "all"
+    property var levels: [{ v: "all", l: "All" }, { v: "error", l: "Errors" }, { v: "warn", l: "Warnings" }, { v: "log", l: "Logs" }, { v: "info", l: "rexui" }]
+    property int levelAt: Math.max(0, levels.findIndex((x) => x.v === level))
+    property real levelW: 64
+    property string query: ""
+    property var matcher: matcherOf(query)
+    function matcherOf(q) {
+        if (!q) return null;
+        try {
+            const last = q.lastIndexOf("/");
+            if (q.length > 2 && q[0] === "/" && last > 0) return { re: RegExp(q.slice(1, last), q.slice(last + 1).replace(/[gy]/g, "")) };
+            if (q.includes("*") || q.includes("?")) {
+                const src = q.split("").map((c) => c === "*" ? ".*" : c === "?" ? "." : "\\^$.|+()[]{}".includes(c) ? "\\" + c : c).join("");
+                return { re: RegExp(src, "i") };
+            }
+            return { text: q.toLowerCase() };
+        } catch (e) {
+            return { bad: String(e.message || e) };
+        }
+    }
+    property var lines: tab === 0 ? debug.console : []
+    property var shownLines: lines.filter((l) => keep(l, level, matcher)).slice(-200)
+    property int errors: debug.console.filter((l) => l.level === "error").length
+    property int warnings: debug.console.filter((l) => l.level === "warn").length
+    property string evalIn: ""
+    property var userFiles: debug.docs.filter((d) => !d.devtools)
+    function loaded(path) { return !!path && debug.docs.some((d) => d.path === path); }
+    property string evalFile: loaded(evalIn) ? evalIn : debug.selected && loaded(debug.selected.file) ? debug.selected.file : ((userFiles[0] || {}).path || "")
+    property bool evalMenu: false
+    property var history: debug.options.history || []
+    readonly property int historyMax: conf.values["debug-history"] === undefined || conf.values["debug-history"] === "" ? 500 : Math.max(0, Math.floor(Number(conf.values["debug-history"])) || 0)
+    readonly property int historyChars: 256 * 1024
+    function remember(code) {
+        if (!historyMax) { if (history.length) debug.option("history", null); return; }
+        if (code.length > 16 * 1024) return;
+        let h = history.length && history[history.length - 1] === code ? history.slice() : history.concat([code]);
+        h = h.slice(-historyMax);
+        let size = 0;
+        for (const s of h) size += s.length;
+        while (size > historyChars && h.length > 1) size -= h.shift().length;
+        debug.option("history", h);
+    }
+    property int back: -1
+    property string typed: ""
+    property int caret: input.cursorPosition
+    property string before: typed.slice(0, caret)
+    property bool dismissed: false
+    property string taken: ""
+    property int ci: 0
+    property bool nameHere: /[\w$.]$/.test(before) && !/[\w$]/.test(typed.charAt(caret)) && !inProse(before)
+        && !/(^|[^\w$.])\d[\w.]*$/.test(before) && !/[)\]}'"`?]\.[\w$]*$/.test(before)
+property var comp: nameHere && !dismissed && debug.enabled ? debug.complete(evalFile, before) : null
+property var items: comp && !(comp.items.length === 1 && comp.items[0].name === comp.prefix) ? byKind(comp.items) : []
+property var lastItems: []
+property string lastScope: ""
+onItemsChanged: {
+    if (ci >= items.length) ci = 0;
+    if (items.length) {
+        lastItems = items;
+        lastScope = comp.base ? comp.base : short(evalFile);
+    }
+}
+function inProse(s) {
+    let q = "";
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charAt(i);
+        if (q) {
+            if (c === "\\") i++;
+            else if (c === q) q = "";
+        } else if (c === '"' || c === "'" || c === "`") q = c;
+        else if (c === "/" && s.charAt(i + 1) === "/") return true;
+    }
+    return q !== "";
+}
+property var kindTitles: ({ id: "Ids", property: "Properties", function: "Functions", method: "Methods", element: "Elements", global: "Globals", value: "Values" })
+function byKind(list) {
+    const kinds = [];
+    list.forEach((it) => { if (!kinds.includes(it.kind)) kinds.push(it.kind); });
+    let out = [];
+    kinds.forEach((k) => {
+        const mine = list.filter((it) => it.kind === k);
+        out = out.concat(mine.map((it, i) => Object.assign({}, it, { head: i === 0 && kinds.length > 1 ? kindTitles[k] || k : "" })));
+    });
+    return out;
+}
+function accept(i) {
+    const it = items[i];
+    if (!it) return;
+    const from = caret - comp.prefix.length, rest = typed.slice(caret);
+    const call = (it.kind === "function" || it.kind === "method") && rest.charAt(0) !== "(";
+    const added = it.name + (call ? "()" : "");
+    const at = from + added.length - (call ? 1 : 0);
+    taken = typed.slice(0, from) + added + rest;
+    dismissed = true;
+    ci = 0;
+    input.select(from, caret);
+    input.insert(added);
+    if (call) input.select(at, at);
+}
+function nameSpans(it) {
+    const p = comp ? comp.prefix : "", n = it.name, at = p ? n.toLowerCase().indexOf(p.toLowerCase()) : -1;
+    const runs = at < 0 ? [{ text: n, color: ink }]
+        : [{ text: n.slice(0, at), color: ink }, { text: n.slice(at, at + p.length), color: blue, bold: true }, { text: n.slice(at + p.length), color: ink }];
+    return it.kind === "function" || it.kind === "method" ? runs.concat([{ text: "()", color: faint }]) : runs;
+}
+function detailOf(it) { return ["ƒ", "global", "undefined", '""'].includes(it.detail) ? "" : it.detail || ""; }
+function glyphOf(k) { return { id: "number", property: "p.square", function: "f.cursive", method: "f.cursive", element: "square.on.square", global: "globe", value: "circle" }[k] || "circle"; }
+function kindColor(k) { return k === "id" ? idColor : k === "function" || k === "method" ? numColor : k === "global" ? tagColor : k === "element" ? compColor : dim; }
+
+function keep(l, lv, m) {
+    if (lv !== "all" && !(l.level === lv || (lv === "log" && (l.level === "input" || l.level === "result")))) return false;
+    if (!m) return true;
+    if (m.bad) return false;
+    if (m.re) return m.re.test(l.text) || m.re.test(l.file || "");
+    return l.text.toLowerCase().includes(m.text) || (l.file || "").toLowerCase().includes(m.text);
+}
+function hhmmss(t) {
+    const d = new Date(t), p = (n, w) => String(n).padStart(w || 2, "0");
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + "." + p(d.getMilliseconds(), 3);
+}
+function glyph(lv) { return { error: "xmark.octagon.fill", warn: "exclamationmark.triangle.fill", info: "info.circle", input: "chevron.right", result: "arrow.turn.down.left" }[lv] || "circle.fill"; }
+function tint(lv) { return lv === "error" ? errColor : lv === "warn" ? warnColor : lv === "result" ? okColor : lv === "input" ? blue : lv === "info" ? faint : dim; }
+function short(p) { return (p || "").split("/").pop(); }
+function run(code) {
+    if (!code.trim()) return;
+    remember(code);
+    back = -1;
+    debug.eval(evalFile, code);
+}
+
+property bool perfOn: tab === 1 && debug.enabled
+property int fps: perfOn ? rex.fps : 0
+property var seen: []
+onFpsChanged: if (fps > 0) seen = seen.concat([fps]).slice(-120)
+property real most: Math.max(60, ...seen)
+property var bars: seen.map((f) => ({ h: Math.max(1, 54 * f / most), c: f >= most * 0.9 ? blue : f >= most * 0.5 ? warnColor : errColor }))
+property var perf: ({ rex: {}, server: [], docs: [], cores: 1 })
+property var cpuSeen: []
+Timer {
+    interval: 1000; running: perfOn; repeat: true
+    onTriggered: {
+        perf = debug.perf();
+        if (perf.rex.cpu >= 0) cpuSeen = cpuSeen.concat([perf.rex.cpu]).slice(-120);
+    }
+}
+onPerfOnChanged: if (perfOn) perf = debug.perf()
+property real cpuTop: Math.max(100, ...cpuSeen)
+property var cpuBars: cpuSeen.map((c) => ({ h: Math.max(1, 54 * c / cpuTop), c: c < 50 ? blue : c < 100 ? warnColor : errColor }))
+property var server: perf.server.find((p) => p.role === "server") || null
+property var processes: (perf.rex.pid ? [perf.rex] : []).concat(perf.server)
+property var threadGroups: perf.threads || []
+property int threadsRunning: threadGroups.reduce((t, g) => t + g.running, 0)
+property int perfView: 0
+property var colW: Object.assign({ ms: 130, calls: 70, evals: 84, nodes: 84, bcpu: 240 }, debug.options.perfCols || {})
+property string colKey: ""
+property real colFrom: 0
+function dragCol(k, dx) {
+    if (colKey !== k) { colKey = k; colFrom = colW[k]; }
+    const o = Object.assign({}, colW);
+    o[k] = Math.round(Math.max(44, Math.min(600, colFrom - dx)));
+    colW = o;
+}
+function dropCol() { debug.option("perfCols", colW); colKey = ""; }
+property var perfViews: ["Files", "Processes", "Threads", "Long turns"]
+property var longs: perf.long || {}
+property var recentLong: longs.recent || []
+property var turnCounts: longs.turns || {}
+function up(started) {
+    if (!started || !perf.now) return "…";
+    const s = perf.now - started, d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m ? m + "m" : s + "s";
+}
+function secs(v) { return v === undefined ? "…" : v >= 3600 ? (v / 3600).toFixed(1) + " h" : v >= 60 ? (v / 60).toFixed(1) + " min" : v.toFixed(1) + " s"; }
+property bool perfOwn: true
+property string sortKey: "ms"
+property var perfRows: perf.docs.filter((d) => perfOwn || !d.devtools)
+.map((d) => Object.assign({}, d, { bcpu: d.backends.reduce((t, b) => t + Math.max(0, b.cpu), 0), bmem: d.backends.reduce((t, b) => t + Math.max(0, b.mem), 0) }))
+.sort((x, y) => sortKey === "file" ? x.file.localeCompare(y.file) : (y[sortKey] - x[sortKey]) || x.file.localeCompare(y.file))
+property real msTop: Math.max(1, ...perf.docs.map((d) => d.ms))
+function pct(v) { return v === undefined || v < 0 ? "…" : (v < 10 ? v.toFixed(1) : Math.round(v)) + "%"; }
+function mb(v) { return v === undefined || v < 0 ? "…" : v >= 1024 ? (v / 1024).toFixed(2) + " GB" : Math.round(v) + " MB"; }
+property var engineMs: perf.rex.engine !== undefined ? perf.rex.engine : perf.rex.js
+function ms(v) { return v === undefined ? "…" : v < 10 ? v.toFixed(2) : v.toFixed(1); }
+property var cards: [
+    { l: "Frames", v: fps ? String(fps) : "…", u: "fps", s: seen.length ? "low " + Math.min(...seen) + " · high " + Math.max(...seen) : "counting…",
+      c: !fps || fps >= most * 0.9 ? ink : fps >= most * 0.5 ? warnColor : errColor },
+    { l: "Rex UI · CPU", v: pct(perf.rex.cpu), u: "", s: "of one core · " + perf.cores + " cores",
+      c: perf.rex.cpu >= 100 ? errColor : perf.rex.cpu >= 50 ? warnColor : ink },
+    { l: "Rex UI · memory", v: mb(perf.rex.mem), u: "", s: perf.rex.threads ? perf.rex.threads + " threads, " + threadsRunning + " running" : "…", c: ink },
+    { l: "Engine", v: ms(engineMs), u: "ms/s", s: "in " + perf.docs.length + " files", c: engineMs >= 50 ? warnColor : ink },
+    { l: "Rex Server · CPU, memory", v: server ? pct(server.cpu) : "—", u: server ? mb(server.mem) : "",
+      s: server ? "up " + up(server.started) + " · " + server.children + " processes in panes" : "not found", c: ink },
+]
+
+Rectangle {
+    color: raised; horizontalPadding: 10; verticalPadding: 8
+    Row {
+        spacing: 4
+        Stack {
+            width: tabs.length * tabW + 4; height: 28
+            Rectangle { radius: r + 1; color: field; border.width: 1; border.color: line }
+            Row {
+                padding: 2
+                Item { width: tab * tabW; height: 1 }
+                Rectangle { width: tabW; height: 24; radius: r - 1; color: hover; border.width: 1; border.color: line; animate: 280 }
+            }
+            Grid {
+                columns: tabs.length; padding: 2
+                model: tabs
+                delegate: Stack {
+                    height: 24
+                    Stack {
+                        halign: "center"; valign: "center"
+                        Text { font.family: uiFont; text: modelData; font.size: 12; font.weight: tab === index ? "semibold" : "medium"; color: tab === index || tabB.hovered ? ink : dim; colorAnimation: fade }
+                    }
+                    Button { focusable: false; id: tabB; stateLayer: false; onClicked: tab = index }
+                }
+            }
+        }
+        Item { grow: 1 }
+        Stack {
+            visible: errors > 0
+            Rectangle {
+                radius: 10; height: 20; horizontalPadding: 7; color: errB.hovered ? errTint : "transparent"; border.width: 1; border.color: errTint; colorAnimation: fade
+                Row { valign: "center"; spacing: 4; Icon { name: "xmark.octagon.fill"; font.size: 10; color: errColor } Text { font.family: uiFont; text: String(errors); font.size: 11; font.tabular: true; color: errColor } }
+            }
+            Button { focusable: false; id: errB; stateLayer: false; onClicked: { tab = 0; level = "error"; } }
+        }
+        Stack {
+            visible: warnings > 0
+            Rectangle {
+                radius: 10; height: 20; horizontalPadding: 7; color: warnB.hovered ? warnTint : "transparent"; border.width: 1; border.color: warnTint; colorAnimation: fade
+                Row { valign: "center"; spacing: 4; Icon { name: "exclamationmark.triangle.fill"; font.size: 10; color: warnColor } Text { font.family: uiFont; text: String(warnings); font.size: 11; font.tabular: true; color: warnColor } }
+            }
+            Button { focusable: false; id: warnB; stateLayer: false; onClicked: { tab = 0; level = "warn"; } }
+        }
+        Item { width: 6; height: 1 }
+        Row {
+            visible: !debug.here.pane; spacing: 2
+            Stack {
+                width: 26; height: 26
+                Rectangle { radius: r; color: sideMenu || sideB.hovered ? hover : "transparent"; colorAnimation: fade }
+                Stack { halign: "center"; valign: "center"; Icon { name: (sides.find((x) => x.s === mySide) || sides[0]).i; font.size: 12; color: sideMenu || sideB.hovered ? ink : dim; colorAnimation: fade } }
+                Button { focusable: false; id: sideB; stateLayer: false; tip: "Dock side"; onClicked: sideMenu = !sideMenu }
+            }
+            Grid {
+                visible: sideMenu; columns: 4; spacing: 2
+                model: sides
+                delegate: Stack {
+                    width: 26; height: 26
+                    Rectangle { radius: r; color: modelData.s === mySide ? blue : pickSideB.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: modelData.i; font.size: 12; color: modelData.s === mySide ? onBlue : pickSideB.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: pickSideB; stateLayer: false; tip: "Dock " + modelData.s; onClicked: dockTo(modelData.s) }
+                }
+            }
+        }
+        Stack {
+            visible: !debug.here.pane || !!debug.here.floating; width: 20; height: 26
+            Rectangle { radius: r; color: gripB.hovered || dragging ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "line.3.horizontal"; font.size: 11; color: gripB.hovered || dragging ? ink : faint; colorAnimation: fade } }
+            Button { focusable: false; id: gripB; stateLayer: false; drag: true; cursor: "move"; tip: debug.here.floating ? "Move" : ""
+                onDragged: { dragging = true; if (debug.here.floating) debug.dragFloating(debug.here.path, "move"); else debug.dragToPane(devFile(me), "move"); }
+                onDropped: { dragging = false; if (debug.here.floating) debug.dragFloating(debug.here.path, "drop"); else debug.dragToPane(devFile(me), "drop"); } }
+        }
+        Stack {
+            visible: !debug.here.pane; width: 26; height: 26
+            Rectangle { radius: r; color: popB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "macwindow.on.rectangle"; font.size: 12; color: popB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: popB; stateLayer: false; onClicked: popOut() }
+        }
+        Stack {
+            visible: !debug.here.pane; width: 26; height: 26
+            Rectangle { radius: r; color: paneB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "rectangle.split.2x1"; font.size: 12; color: paneB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: paneB; stateLayer: false; onClicked: toPane() }
+        }
+        Stack {
+            visible: !debug.here.pane; width: 26; height: 26
+            Rectangle { radius: r; color: hereB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "rectangle.inset.filled"; font.size: 12; color: hereB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: hereB; stateLayer: false; onClicked: openHere() }
+        }
+        Stack {
+            visible: !!debug.here.pane; width: 26; height: 26
+            Rectangle { radius: r; color: backB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "sidebar.left"; font.size: 12; color: backB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: backB; stateLayer: false; onClicked: backToDock() }
+        }
+        Stack {
+            visible: tab === 0 && shownLines.length > 0; width: 26; height: 26
+            Rectangle { radius: r; color: clearB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "trash"; font.size: 12; color: clearB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: clearB; stateLayer: false; onClicked: debug.clear() }
+        }
+        Stack {
+            width: 26; height: 26
+            Rectangle { radius: r; color: offB.hovered ? hover : "transparent"; colorAnimation: fade }
+            Stack { halign: "center"; valign: "center"; Icon { name: "xmark"; font.size: 12; color: offB.hovered ? ink : dim; colorAnimation: fade } }
+            Button { focusable: false; id: offB; stateLayer: false; tip: "Close"; onClicked: closeMe() }
+        }
+    }
+}
+Rectangle { height: 1; color: line }
+
+Column {
+    visible: tab === 0; grow: 1; spacing: 0
+    opacity: faded === 0 ? 1 : 0; opacityAnimation: 180
+    Row {
+        horizontalPadding: 10; verticalPadding: 6; spacing: 10
+        Stack {
+            width: levels.length * levelW + 4; height: 26
+            Rectangle { radius: r + 1; color: field; border.width: 1; border.color: line }
+            Row {
+                padding: 2
+                Item { width: levelAt * levelW; height: 1 }
+                Rectangle { width: levelW; height: 22; radius: r - 1; color: selColor; animate: 280 }
+            }
+            Grid {
+                columns: levels.length; padding: 2
+                model: levels
+                delegate: Stack {
+                    height: 22
+                    Stack {
+                        halign: "center"; valign: "center"
+                        Text { font.family: uiFont; text: modelData.l; font.size: 11; font.weight: level === modelData.v ? "semibold" : "regular"; color: level === modelData.v || levelB.hovered ? ink : dim; colorAnimation: fade }
+                    }
+                    Button { focusable: false; id: levelB; stateLayer: false; onClicked: level = modelData.v }
+                }
+            }
+        }
+        Rectangle {
+            grow: 1; height: 26; valign: "center"; radius: r; color: field; border.width: 1; border.color: matcher && matcher.bad ? errColor : query ? blue : line; colorAnimation: fade; horizontalPadding: 8
+            tip: matcher && matcher.bad ? matcher.bad : ""
+            Row {
+                valign: "center"; spacing: 6
+                Icon { name: "magnifyingglass"; font.size: 10; color: query ? blue : faint; colorAnimation: fade }
+                TextField { font.family: uiFont; grow: 1; text: query; placeholder: "Filter"; font.size: 11.5; color: ink; onTextChanged: query = text }
+                Stack {
+                    visible: !!query; width: 16; height: 16
+                    Stack { halign: "center"; valign: "center"; Icon { name: "xmark.circle.fill"; font.size: 11; color: clearQ.hovered ? dim : faint; colorAnimation: fade } }
+                    Button { focusable: false; id: clearQ; stateLayer: false; onClicked: query = "" }
+                }
+            }
+        }
+    }
+    Rectangle { height: 1; color: line }
+    Stack {
+        id: logArea; grow: 1
+        List {
+            spacing: 0; follow: true; gutter: 8; verticalPadding: 2; fade: 0.04; virtualized: true
+            model: shownLines; modelKey: "n"
+            delegate: Rectangle {
+                id: logRow; horizontalPadding: 10; verticalPadding: 3
+                color: modelData.level === "error" ? errTint : modelData.level === "warn" ? warnTint : "transparent"
+                property var parts: modelData.text.split("\n")
+                property bool json: (modelData.level === "log" || modelData.level === "result") && /^[\[{]/.test(modelData.text)
+                    property int keep: json ? jsonFoldTo : foldLines
+                    property bool folds: json ? parts.length >= jsonFoldAt : parts.length > foldLines || modelData.text.length > foldChars
+                    property bool opened: !!openLines[modelData.n]
+                    property var shown: opened || !folds ? parts : folded(parts, json)
+                    property bool perLine: shown.length > 1 && shown.length <= 400
+                    property string lineSyntax: modelData.level === "input" || modelData.level === "result" || (modelData.level === "log" && json) ? "js" : ""
+                    property color lineColor: modelData.level === "error" ? errColor : modelData.level === "warn" ? warnColor : modelData.level === "info" ? dim : ink
+                    Row {
+                        spacing: 8; valign: "top"
+                        Text { font.family: monoFont; selectable: true; text: hhmmss(modelData.t); font.mono: true; font.size: 10; color: faint; width: 78 }
+                        Stack { width: 12; height: 15; Stack { halign: "center"; valign: "center"; Icon { name: glyph(modelData.level); font.size: 9; color: tint(modelData.level) } } }
+                        Column {
+                            grow: 1; spacing: 2
+                            Text { font.family: monoFont; selectable: true; selectionGroup: "log"; visible: !perLine
+                                text: perLine ? "" : shown.join("\n"); wrap: true; font.mono: true; font.size: 11.5
+                                syntax: lineSyntax; syntaxColors: jsColors; color: lineColor
+                            }
+                            Grid {
+                                visible: perLine; columns: 1; spacing: 0
+                                model: perLine ? shown : []
+                                delegate: Row {
+                                    property string indent: lead(modelData)
+                                    Text { font.family: monoFont; text: indent; font.mono: true; font.size: 11.5 }
+                                    Text { font.family: monoFont; selectable: true; selectionGroup: "log"; grow: 1
+                                        text: modelData.slice(indent.length); wrap: true; font.mono: true; font.size: 11.5
+                                        syntax: logRow.lineSyntax; syntaxColors: jsColors; color: logRow.lineColor
+                                    }
+                                }
+                            }
+                            Stack {
+                                visible: folds
+                                Row {
+                                    spacing: 5; height: 16
+                                    Icon { name: opened ? "chevron.down" : "chevron.right"; font.size: 8; color: foldB.hovered ? ink : faint; colorAnimation: fade }
+                                    Text { font.family: monoFont; text: opened ? "fold" : parts.length > keep ? (parts.length - keep) + " more lines" : (modelData.text.length - foldChars) + " more characters"; font.mono: true; font.size: 10; color: foldB.hovered ? ink : faint; colorAnimation: fade }
+                                }
+                                Button { focusable: false; id: foldB; stateLayer: false; onClicked: toggleLine(modelData.n) }
+                            }
+                        }
+                        Text { font.family: monoFont; selectable: true; text: modelData.file || "rexui"; font.mono: true; font.size: 10; color: faint; maxLines: 1 }
+                    }
+                    }
+                    }
+                Column {
+                    valign: "bottom"; horizontalPadding: 10; verticalPadding: 6
+                    Rectangle {
+                        radius: r + 2; color: raised; border.width: 1; border.color: line; padding: 4
+                        expanded: evalMenu; expandFrom: "bottom"; animate: 200; easing: "standard"
+                        onPressedOutside: evalMenu = false
+                        List {
+                            maxHeight: 160; spacing: 1; gutter: 6
+                            model: debug.docs
+                            delegate: Stack {
+                                Rectangle {
+                                    radius: r; horizontalPadding: 8; height: 24
+                                    color: modelData.path === evalFile ? selColor : evalB.hovered ? hover : "transparent"; colorAnimation: fade
+                                    Row {
+                                        valign: "center"; spacing: 8
+                                        Text { font.family: monoFont; text: modelData.file; font.mono: true; font.size: 11; color: ink; maxLines: 1 }
+                                        Item { grow: 1 }
+                                        Text { font.family: uiFont; visible: modelData.devtools; text: "debug UI"; font.size: 10; color: faint }
+                                    }
+                                }
+                                Button { focusable: false; id: evalB; stateLayer: false; onClicked: { evalIn = modelData.path; evalMenu = false; } }
+                            }
+                        }
+                    }
+                }
+                Column {
+                    valign: "bottom"; horizontalPadding: 10; verticalPadding: 6
+                    Rectangle {
+                        width: 460; radius: r + 2; color: raised; border.width: 1; border.color: line; padding: 4
+                        expanded: items.length > 0; expandFrom: "bottom"; animate: 160; easing: "standard"
+                        Column {
+                            spacing: 2
+                            List {
+                                maxHeight: Math.max(44, Math.min(176, logArea.layoutHeight - 46)); spacing: 1; gutter: 6; reveal: ci
+                                model: lastItems
+                                delegate: Column {
+                                    spacing: 0
+                                    Row { visible: !!modelData.head; horizontalPadding: 8; verticalPadding: 3; Text { font.family: uiFont; text: modelData.head; font.size: 10; font.weight: "semibold"; color: faint } }
+                                    Stack {
+                                        Rectangle {
+                                            radius: r; horizontalPadding: 8; height: 22
+                                            color: index === ci ? selColor : compB.hovered ? hover : "transparent"; colorAnimation: fade
+                                            Row {
+                                                valign: "center"; spacing: 8
+                                                Stack { width: 14; height: 15; valign: "center"; Stack { halign: "center"; valign: "center"; Icon { name: glyphOf(modelData.kind); font.size: 9.5; color: kindColor(modelData.kind) } } }
+                                                Text { font.family: monoFont; spans: nameSpans(modelData); font.mono: true; font.size: 11.5; color: ink; maxLines: 1 }
+                                                Item { grow: 1 }
+                                                Text { font.family: monoFont; visible: !!detailOf(modelData); text: detailOf(modelData); font.mono: true; font.size: 10.5; color: faint; maxLines: 1 }
+                                            }
+                                        }
+                                        Button { focusable: false; id: compB; stateLayer: false; onClicked: accept(index) }
+                                    }
+                                }
+                            }
+                            Rectangle { height: 1; color: line }
+                            Row {
+                                horizontalPadding: 8; verticalPadding: 2; spacing: 6
+                                Text { font.family: monoFont; text: lastScope; font.mono: true; font.size: 10; color: faint; maxLines: 1 }
+                                Item { grow: 1 }
+                                Text { font.family: uiFont; text: "↑↓ choose   ⇥ take   esc close"; font.size: 10; color: faint }
+                            }
+                        }
+                    }
+                }
+            }
+            Rectangle { height: 1; color: line }
+            Row {
+                horizontalPadding: 10; verticalPadding: 6; spacing: 8
+                Stack {
+                    Rectangle {
+                        radius: r; horizontalPadding: 8; height: 24
+                        color: evalMenu ? hover : inB.hovered ? hover : field; border.width: 1; border.color: line; colorAnimation: fade
+                        Row {
+                            valign: "center"; spacing: 5
+                            Icon { name: "doc.text"; font.size: 9.5; color: dim }
+                            Text { font.family: monoFont; text: short(evalFile) || "no file"; font.mono: true; font.size: 10.5; color: blue; maxLines: 1 }
+                            Icon { name: evalMenu ? "chevron.down" : "chevron.up"; font.size: 8; color: inB.hovered || evalMenu ? ink : faint; colorAnimation: fade }
+                        }
+                    }
+                    Button { focusable: false; id: inB; stateLayer: false; enabled: !evalMenu; onClicked: evalMenu = true }
+                }
+                Text { font.family: monoFont; text: "›"; font.mono: true; font.size: 14; font.weight: "bold"; color: blue }
+                TextField { font.family: monoFont;
+                    id: input; grow: 1; arrows: true; autoPairs: true; syntax: "js"; syntaxColors: jsColors
+                    placeholder: "Run code in this file (its ids, its properties)"; font.mono: true; font.size: 11.5; color: ink
+                    onTextChanged: { if (text !== typed) { dismissed = text === taken; typed = text; ci = 0; } }
+                    onCancelled: dismissed = true
+                    onKeyPressed: {
+                        if (mods) return false;
+                        if (key === "escape" && evalMenu) { evalMenu = false; return true; }
+                        if (key === "escape" && items.length) { dismissed = true; return true; }
+                        if (key === "tab" && items.length) { accept(ci); return true; }
+                        return false;
+                    }
+                    onAccepted: {
+                        if (items.length && items[ci] && items[ci].name !== comp.prefix) { accept(ci); return; }
+                        run(text); text = ""; typed = "";
+                    }
+                    onArrow: {
+                        if (items.length) { ci = direction === "up" ? (ci + items.length - 1) % items.length : (ci + 1) % items.length; return; }
+                        if (!history.length) return;
+                        back = direction === "up" ? (back < 0 ? history.length - 1 : Math.max(0, back - 1)) : (back < 0 ? -1 : back + 1);
+                        if (back >= history.length) back = -1;
+                        dismissed = true;
+                        typed = back < 0 ? "" : history[back];
+                        text = typed;
+                    }
+                }
+            }
+        }
+
+        Column {
+            visible: tab === 1; grow: 1; spacing: 0
+            opacity: faded === 1 ? 1 : 0; opacityAnimation: 180
+            Grid {
+                columns: cards.length; spacing: 8; horizontalPadding: 10; verticalPadding: 10
+                model: cards
+                delegate: Rectangle {
+                    radius: r + 2; color: field; border.width: 1; border.color: line; horizontalPadding: 12; verticalPadding: 9
+                    Column {
+                        spacing: 2
+                        Text { font.family: uiFont; text: modelData.l; font.size: 10.5; color: faint; maxLines: 1 }
+                        Row {
+                            spacing: 4
+                            Text { font.family: monoFont; text: modelData.v; font.mono: true; font.size: 20; font.weight: "semibold"; font.tabular: true; color: modelData.c; colorAnimation: 240; maxLines: 1 }
+                            Text { font.family: uiFont; visible: !!modelData.u; text: modelData.u; font.size: 11; color: dim }
+                        }
+                        Text { font.family: uiFont; text: modelData.s; font.size: 10.5; color: faint; maxLines: 1 }
+                    }
+                }
+            }
+            Row {
+                horizontalPadding: 10; spacing: 8
+                Column {
+                    grow: 1; spacing: 4
+                    Text { font.family: uiFont; text: "Frames a second, Rex's main thread"; font.size: 10.5; color: faint }
+                    Rectangle {
+                        color: field; radius: r; border.width: 1; border.color: line; padding: 6; height: 68
+                        Grid {
+                            columns: 120; spacing: 1; width: 359; height: 54; halign: "left"
+                            model: bars
+                            delegate: Stack { width: 2; height: 54; valign: "bottom"; Rectangle { height: modelData.h; radius: 1; color: modelData.c; animate: 300; easing: "standard"; colorAnimation: 300 } }
+                        }
+                    }
+                }
+                Column {
+                    grow: 1; spacing: 4
+                    Text { font.family: uiFont; text: "CPU, Rex UI (% of one core)"; font.size: 10.5; color: faint }
+                    Rectangle {
+                        color: field; radius: r; border.width: 1; border.color: line; padding: 6; height: 68
+                        Grid {
+                            columns: 120; spacing: 1; width: 359; height: 54; halign: "left"
+                            model: cpuBars
+                            delegate: Stack { width: 2; height: 54; valign: "bottom"; Rectangle { height: modelData.h; radius: 1; color: modelData.c; animate: 300; easing: "standard"; colorAnimation: 300 } }
+                        }
+                    }
+                }
+                Column {
+                    spacing: 2; width: 200
+                    Item { height: 14; width: 1 }
+                    Stack {
+                        height: 26
+                        Rectangle { radius: r; color: fpsB.hovered ? hover : "transparent"; colorAnimation: fade }
+                        Row {
+                            horizontalPadding: 6; spacing: 8
+                            Icon { name: debug.options.fps ? "checkmark.square.fill" : "square"; font.size: 12; color: debug.options.fps ? blue : dim; colorAnimation: fade }
+                            Text { font.family: uiFont; text: "FPS meter over the panes"; font.size: 11.5; color: ink }
+                        }
+                        Button { focusable: false; id: fpsB; stateLayer: false; onClicked: debug.option("fps", !debug.options.fps || null) }
+                    }
+                    Stack {
+                        height: 26
+                        Rectangle { radius: r; color: ownP.hovered ? hover : "transparent"; colorAnimation: fade }
+                        Row {
+                            horizontalPadding: 6; spacing: 8
+                            Icon { name: perfOwn ? "checkmark.square.fill" : "square"; font.size: 12; color: perfOwn ? blue : dim; colorAnimation: fade }
+                            Text { font.family: uiFont; text: "The debug UI's own files"; font.size: 11.5; color: ink }
+                        }
+                        Button { focusable: false; id: ownP; stateLayer: false; onClicked: perfOwn = !perfOwn }
+                    }
+                }
+            }
+            Item { height: 10; width: 1 }
+            Rectangle { height: 1; color: line }
+            Row {
+                horizontalPadding: 10; verticalPadding: 6; spacing: 10
+                Stack {
+                    width: perfViews.length * 92 + 4; height: 26
+                    Rectangle { radius: r + 1; color: field; border.width: 1; border.color: line }
+                    Row {
+                        padding: 2
+                        Item { width: perfView * 92; height: 1 }
+                        Rectangle { width: 92; height: 22; radius: r - 1; color: hover; border.width: 1; border.color: line; animate: 280 }
+                    }
+                    Grid {
+                        columns: perfViews.length; padding: 2
+                        model: perfViews
+                        delegate: Stack {
+                            height: 22
+                            Stack {
+                                halign: "center"; valign: "center"
+                                Text { font.family: uiFont; text: modelData; font.size: 11.5; font.weight: perfView === index ? "semibold" : "regular"; color: perfView === index || viewB.hovered ? ink : dim; colorAnimation: fade }
+                            }
+                            Button { focusable: false; id: viewB; stateLayer: false; onClicked: perfView = index }
+                        }
+                    }
+                }
+                Text { font.family: uiFont; grow: 1; font.size: 10.5; color: faint; maxLines: 1
+                    text: perfView === 0 ? "What the engine took running each file, the calls into it and bindings run a second; its backends' CPU and memory. A click: the file in Elements."
+                        : perfView === 3 ? "Main's turns over 4 ms (and other threads' long work), newest first: what ran, from which file, and for how long. A turn over 10 ms is a frame missed at 100 Hz."
+                        : perfView === 1 ? "Rex UI, and Rex Server's processes: the server (its sessions; the shells and programs in the panes are its children) and its helpers."
+                        : perf.rex.threads ? "Threads aren't cores: " + perf.rex.threads + " threads, " + threadsRunning + " running now; the rest wait (a terminal's reader, a backend's reader) and take no CPU." : "" }
+            }
+            Rectangle { height: 1; color: line }
+            Column {
+                visible: perfView === 0; grow: 1; spacing: 0
+                Rectangle {
+                    color: raised; horizontalPadding: 10; height: 24
+                    Row {
+                        spacing: 0
+                        Stack {
+                            grow: 1
+                            Row { Text { font.family: uiFont; text: "File" + (sortKey === "file" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "file" ? "semibold" : "regular"; color: sortKey === "file" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "file" }
+                        }
+                        Stack {
+                            width: 7; height: 24
+                            Stack { halign: "center"; Rectangle { width: colKey === "ms" ? 2 : 1; color: colKey === "ms" || h_ms.hovered ? blue : line; colorAnimation: fade } }
+                            Button { focusable: false; id: h_ms; stateLayer: false; drag: true; cursor: "resizeLeftRight"; onDragged: dragCol("ms", dx); onDropped: dropCol() }
+                        }
+                        Stack {
+                            width: colW.ms
+                            Row { Text { font.family: uiFont; text: "Engine ms/s" + (sortKey === "ms" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "ms" ? "semibold" : "regular"; color: sortKey === "ms" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "ms" }
+                        }
+                        Stack {
+                            width: 7; height: 24
+                            Stack { halign: "center"; Rectangle { width: colKey === "calls" ? 2 : 1; color: colKey === "calls" || h_calls.hovered ? blue : line; colorAnimation: fade } }
+                            Button { focusable: false; id: h_calls; stateLayer: false; drag: true; cursor: "resizeLeftRight"; onDragged: dragCol("calls", dx); onDropped: dropCol() }
+                        }
+                        Stack {
+                            width: colW.calls
+                            Row { Text { font.family: uiFont; text: "calls/s" + (sortKey === "calls" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "calls" ? "semibold" : "regular"; color: sortKey === "calls" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "calls" }
+                        }
+                        Stack {
+                            width: 7; height: 24
+                            Stack { halign: "center"; Rectangle { width: colKey === "evals" ? 2 : 1; color: colKey === "evals" || h_evals.hovered ? blue : line; colorAnimation: fade } }
+                            Button { focusable: false; id: h_evals; stateLayer: false; drag: true; cursor: "resizeLeftRight"; onDragged: dragCol("evals", dx); onDropped: dropCol() }
+                        }
+                        Stack {
+                            width: colW.evals
+                            Row { Text { font.family: uiFont; text: "bindings/s" + (sortKey === "evals" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "evals" ? "semibold" : "regular"; color: sortKey === "evals" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "evals" }
+                        }
+                        Stack {
+                            width: 7; height: 24
+                            Stack { halign: "center"; Rectangle { width: colKey === "nodes" ? 2 : 1; color: colKey === "nodes" || h_nodes.hovered ? blue : line; colorAnimation: fade } }
+                            Button { focusable: false; id: h_nodes; stateLayer: false; drag: true; cursor: "resizeLeftRight"; onDragged: dragCol("nodes", dx); onDropped: dropCol() }
+                        }
+                        Stack {
+                            width: colW.nodes
+                            Row { Text { font.family: uiFont; text: "elements" + (sortKey === "nodes" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "nodes" ? "semibold" : "regular"; color: sortKey === "nodes" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "nodes" }
+                        }
+                        Stack {
+                            width: 7; height: 24
+                            Stack { halign: "center"; Rectangle { width: colKey === "bcpu" ? 2 : 1; color: colKey === "bcpu" || h_bcpu.hovered ? blue : line; colorAnimation: fade } }
+                            Button { focusable: false; id: h_bcpu; stateLayer: false; drag: true; cursor: "resizeLeftRight"; onDragged: dragCol("bcpu", dx); onDropped: dropCol() }
+                        }
+                        Stack {
+                            width: colW.bcpu
+                            Row { Text { font.family: uiFont; text: "backends: CPU · memory" + (sortKey === "bcpu" ? " ↓" : ""); font.size: 10.5; font.weight: sortKey === "bcpu" ? "semibold" : "regular"; color: sortKey === "bcpu" ? ink : faint } }
+                            Button { focusable: false; stateLayer: false; onClicked: sortKey = "bcpu" }
+                        }
+                    }
+                }
+                Rectangle { height: 1; color: line }
+                List {
+                    grow: 1; spacing: 0; verticalPadding: 2; gutter: 8; fade: 0.04
+                    model: perfOn ? perfRows : []
+                    delegate: Stack {
+                        Rectangle {
+                            horizontalPadding: 10; verticalPadding: 4
+                            color: rowP.hovered ? hover : "transparent"; colorAnimation: fade
+                            Row {
+                                spacing: 0
+                                Row {
+                                    grow: 1; spacing: 6
+                                    Rectangle { width: 6; height: 6; radius: 3; color: modelData.error ? errColor : modelData.devtools ? faint : blue }
+                                    Text { font.family: monoFont; text: modelData.file; font.mono: true; font.size: 11.5; color: modelData.devtools ? dim : ink; maxLines: 1 }
+                                    Text { font.family: uiFont; visible: modelData.devtools || modelData.pane; text: modelData.pane ? "in a pane" : "debug UI"; font.size: 10; color: faint }
+                                }
+                                Item { width: 7; height: 1 }
+                                Stack {
+                                    width: colW.ms; height: 18
+                                    Row {
+                                        Rectangle { width: Math.max(1, (colW.ms - 10) * modelData.ms / msTop); height: 14; radius: 3; color: modelData.ms >= 16 ? errTint : modelData.ms >= 4 ? warnTint : selColor; animate: 300; easing: "standard"; colorAnimation: 300 }
+                                    }
+                                    Row { horizontalPadding: 5; Text { font.family: monoFont; text: ms(modelData.ms); font.mono: true; font.size: 11; font.tabular: true; color: modelData.ms >= 16 ? errColor : modelData.ms >= 4 ? warnColor : ink } }
+                                }
+                                Item { width: 7; height: 1 }
+                                Text { font.family: monoFont; width: colW.calls; text: String(modelData.calls); font.mono: true; font.size: 11; font.tabular: true; color: modelData.calls ? ink : faint }
+                                Item { width: 7; height: 1 }
+                                Text { font.family: monoFont; width: colW.evals; text: String(modelData.evals); font.mono: true; font.size: 11; font.tabular: true; color: modelData.evals ? ink : faint }
+                                Item { width: 7; height: 1 }
+                                Text { font.family: monoFont; width: colW.nodes; text: modelData.nodes + (modelData.natives ? " · " + modelData.natives + " native" : ""); font.mono: true; font.size: 11; font.tabular: true; color: dim; maxLines: 1 }
+                                Item { width: 7; height: 1 }
+                                Text { font.family: monoFont; width: colW.bcpu; wrap: true; maxLines: 3; font.mono: true; font.size: 10.5; font.tabular: true; color: modelData.backends.length ? dim : faint
+                                    text: modelData.backends.length ? modelData.backends.map((b) => b.name + "  " + pct(b.cpu) + " · " + mb(b.mem)).join("\n") : "—" }
+                            }
+                        }
+                        Button { focusable: false; id: rowP; stateLayer: false; onClicked: { const d = debug.docs.find((x) => x.path === modelData.path); if (d && d.root) debug.select(d.path, d.root); } }
+                    }
+                }
+            }
+            Column {
+                visible: perfView === 1; grow: 1; spacing: 0
+                Rectangle {
+                    color: raised; horizontalPadding: 10; height: 24
+                    Row {
+                        spacing: 0
+                        Text { font.family: uiFont; grow: 1; text: "Process"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 64; text: "pid"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 100; text: "version"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 76; text: "up"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 64; text: "CPU"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 80; text: "CPU time"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 84; text: "memory"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 84; text: "threads"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 70; text: "children"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 60; text: "sockets"; font.size: 10.5; color: faint }
+                    }
+                }
+                Rectangle { height: 1; color: line }
+                List {
+                    grow: 1; spacing: 0; verticalPadding: 2; gutter: 8
+                    model: perfOn && perfView === 1 ? processes : []
+                    delegate: Rectangle {
+                        horizontalPadding: 10; verticalPadding: 5
+                        Column {
+                            spacing: 2
+                            Row {
+                                spacing: 0
+                                Row {
+                                    grow: 1; spacing: 6
+                                    Text { font.family: uiFont; text: modelData.name; font.size: 12; font.weight: "semibold"; color: ink; maxLines: 1 }
+                                    Rectangle {
+                                        radius: 8; horizontalPadding: 6; verticalPadding: 1; color: modelData.role === "server" ? selColor : field; border.width: 1; border.color: line
+                                        Text { font.family: uiFont; text: modelData.role; font.size: 10; color: modelData.role === "server" ? ink : dim }
+                                    }
+                                    Text { font.family: uiFont; visible: !!modelData.ours; text: "started by Rex UI"; font.size: 10; color: faint }
+                                    Text { font.family: uiFont; visible: !!modelData.replaced; text: "its app changed on disk since it started (an update it hasn't restarted into)"; font.size: 10; color: warnColor; maxLines: 1 }
+                                }
+                                Text { font.family: monoFont; width: 64; text: String(modelData.pid); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                                Text { font.family: monoFont; width: 100; text: modelData.version || "—"; font.mono: true; font.size: 11; color: dim; maxLines: 1 }
+                                Text { font.family: monoFont; width: 76; text: up(modelData.started); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                                Text { font.family: monoFont; width: 64; text: pct(modelData.cpu); font.mono: true; font.size: 11; font.tabular: true; color: modelData.cpu >= 100 ? errColor : modelData.cpu >= 50 ? warnColor : ink }
+                                Text { font.family: monoFont; width: 80; text: secs(modelData.cpuTime); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                                Text { font.family: monoFont; width: 84; text: mb(modelData.mem); font.mono: true; font.size: 11; font.tabular: true; color: ink }
+                                Text { font.family: monoFont; width: 84; text: (modelData.running || 0) + " / " + (modelData.threads || 0); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                                Text { font.family: monoFont; width: 70; text: String(modelData.children || 0); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                                Text { font.family: monoFont; width: 60; text: String(modelData.sockets || 0); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                            }
+                            Text { font.family: monoFont; text: modelData.command || modelData.path || ""; font.mono: true; font.size: 10; color: faint; wrap: true; maxLines: 2 }
+                        }
+                    }
+                }
+            }
+            Column {
+                visible: perfView === 2; grow: 1; spacing: 0
+                Rectangle {
+                    color: raised; horizontalPadding: 10; height: 24
+                    Row {
+                        spacing: 0
+                        Text { font.family: uiFont; grow: 1; text: "Thread"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 70; text: "threads"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 70; text: "running"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 70; text: "CPU"; font.size: 10.5; color: faint }
+                        Text { font.family: uiFont; width: 84; text: "CPU time"; font.size: 10.5; color: faint }
+                    }
+                }
+                Rectangle { height: 1; color: line }
+                List {
+                    grow: 1; spacing: 0; verticalPadding: 2; gutter: 8; fade: 0.04
+                    model: perfOn && perfView === 2 ? threadGroups : []
+                    delegate: Rectangle {
+                        horizontalPadding: 10; verticalPadding: 3
+                        Row {
+                            spacing: 0
+                            Text { font.family: monoFont; grow: 1; text: modelData.name; font.mono: true; font.size: 11; color: modelData.running ? ink : dim; maxLines: 1 }
+                            Text { font.family: monoFont; width: 70; text: "× " + modelData.count; font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                            Text { font.family: monoFont; width: 70; text: String(modelData.running); font.mono: true; font.size: 11; font.tabular: true; color: modelData.running ? okColor : faint }
+                            Text { font.family: monoFont; width: 70; text: pct(modelData.cpu); font.mono: true; font.size: 11; font.tabular: true; color: modelData.cpu >= 50 ? warnColor : modelData.cpu > 0 ? ink : faint }
+                            Text { font.family: monoFont; width: 84; text: secs(modelData.total); font.mono: true; font.size: 11; font.tabular: true; color: dim }
+                        }
+                    }
+                }
+            }
+            Column {
+                visible: perfView === 3; grow: 1; spacing: 8; padding: 10
+                Row {
+                    spacing: 18
+                    Text { font.family: uiFont; font.size: 11.5; color: ink; text: (turnCounts.count || 0) + " turns" }
+                    Text { font.family: uiFont; font.size: 11.5; color: dim; text: (turnCounts.over4 || 0) + " over 4 ms" }
+                    Text { font.family: uiFont; font.size: 11.5; color: (turnCounts.over10 || 0) ? warnColor : dim; text: (turnCounts.over10 || 0) + " over 10 ms" }
+                    Text { font.family: uiFont; font.size: 11.5; color: (turnCounts.over25 || 0) ? errColor : dim; text: (turnCounts.over25 || 0) + " over 25 ms" }
+                    Text { font.family: uiFont; font.size: 11.5; color: dim; text: "worst " + (turnCounts.worst_ms || 0).toFixed(1) + " ms" }
+                }
+                Graph { height: 48; style: "bars"; gap: 1; min: 0; max: 25; color: warnColor; values: perfOn && perfView === 3 ? recentLong.map((t) => t.ms).reverse() : [] }
+                Rectangle { height: 1; color: line }
+                List {
+                    grow: 1; spacing: 0; fade: 0.04
+                    model: perfOn && perfView === 3 ? recentLong.slice(0, 40) : []
+                    delegate: Row {
+                        spacing: 10; height: 20
+                        Text { font.family: monoFont; font.mono: true; font.size: 10.5; width: 60; color: modelData.ms >= 25 ? errColor : modelData.ms >= 10 ? warnColor : ink; text: modelData.ms.toFixed(1) + " ms" }
+                        Text { font.family: uiFont; font.size: 10.5; width: 130; maxLines: 1; color: dim; text: modelData.cat + (modelData.turn ? "" : " · " + (modelData.thread || "")) }
+                        Text { font.family: uiFont; font.size: 10.5; grow: 1; maxLines: 1; color: ink; text: modelData.name + (modelData.file ? "  " + modelData.file : "") }
+                    }
+                }
+            }
+        }
+
+        List {
+            visible: tab === 2; grow: 1; spacing: 1; padding: 6; gutter: 8; fade: 0.04
+            opacity: faded === 2 ? 1 : 0; opacityAnimation: 180
+            model: tab === 2 ? debug.docs : []
+            delegate: Stack {
+                Rectangle {
+                    radius: r; horizontalPadding: 10; verticalPadding: 6
+                    color: fileB.hovered ? hover : "transparent"; colorAnimation: fade
+                    Column {
+                        spacing: 2
+                        Row {
+                            spacing: 8
+                            Rectangle { width: 7; height: 7; radius: 3.5; valign: "center"; color: modelData.error ? errColor : modelData.devtools ? faint : blue }
+                            Text { font.family: monoFont; text: modelData.file; font.mono: true; font.size: 12; color: ink; maxLines: 1 }
+                            Text { font.family: uiFont; text: modelData.type + (modelData.side ? " · " + modelData.side : "") + (modelData.pane ? " · in a pane" : "") + (modelData.devtools ? " · debug UI" : ""); font.size: 11; color: faint; maxLines: 1 }
+                            Item { grow: 1 }
+                            Text { font.family: uiFont; text: modelData.nodes + " elements"; font.size: 11; color: faint; font.tabular: true }
+                        }
+                        Text { font.family: monoFont; visible: !!modelData.error; text: modelData.error; wrap: true; font.mono: true; font.size: 11; color: errColor }
+                        Text { font.family: monoFont; text: modelData.path; font.mono: true; font.size: 10; color: faint; maxLines: 1 }
+                    }
+                }
+                Button { focusable: false; id: fileB; stateLayer: false; onClicked: if (modelData.root) debug.select(modelData.path, modelData.root) }
+            }
+        }
+    }

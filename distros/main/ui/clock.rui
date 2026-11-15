@@ -1,0 +1,1211 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "top"; height: 40; span: "window"; resizable: false
+    verticalPadding: 7
+    color: surface
+    accent: primary
+    property int previewWidth: Math.max(120, Number(conf.values["tab-preview-width"]) || 480)
+    property int peekWidth: Math.max(120, Number(conf.values["tab-peek-width"]) || 480)
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"]; onStateChanged: { prefsRead = true; publish(); } }
+    property bool prefsRead: false
+    function publish() {
+        if (!prefsRead) return;
+        const colors = Object.assign({ light: pal.key.endsWith("/light") }, pal), had = prefs.state.colors || {};
+        delete colors.key;
+        if (prefs.state.surface !== surface || prefs.state.primary !== primary || Object.keys(colors).some((k) => had[k] !== colors[k]))
+            prefs.send({ set: { surface: surface, primary: primary, colors: colors } });
+    }
+    onPalChanged: publish()
+    FileDialog {
+        id: facePicker; title: qsTr("Choose a profile picture"); types: ["public.image"]
+        onAccepted: prefs.send({ keep: { face: path } })
+    }
+    property string palette: prefs.state.palette || "caelestia"
+    property string scheme: prefs.state.scheme || "auto"
+    property bool light: scheme === "light" || (scheme === "auto" && !theme.dark)
+    Palette { id: colours; chosen: palette; lightMode: light }
+    property var pal: colours.pal
+    function pick(name, light) { return colours.pick(name, light); }
+    property int schemeColumns: 4
+    function schemeRows() {
+        const out = [];
+        for (const [title, rex] of [["Caelestia", false], ["Rex", true]]) {
+            const mine = colours.schemes().filter((s) => s.startsWith("rex/") === rex);
+            out.push({ title });
+            for (let i = 0; i < mine.length; i += schemeColumns) {
+                const row = mine.slice(i, i + schemeColumns);
+                while (row.length < schemeColumns) row.push("");
+                out.push({ row });
+            }
+        }
+        return out;
+    }
+    function current() { return colours.current(); }
+    property var surface: pal.surface
+    property var container: pal.container
+    property var containerHigh: pal.containerHigh
+    property var containerHighest: pal.containerHighest
+    property var primary: pal.primary
+    property var onPrimary: pal.onPrimary
+    property var primaryContainer: pal.primaryContainer
+    property var onPrimaryContainer: pal.onPrimaryContainer
+    property var secondary: pal.secondary
+    property var onSecondary: pal.onSecondary
+    property var secondaryContainer: pal.secondaryContainer
+    property var onSecondaryContainer: pal.onSecondaryContainer
+    property var tertiary: pal.tertiary
+    property var success: pal.success
+    property var ink: pal.ink
+    property var inkDim: pal.inkDim
+    property var outline: pal.outline
+    property var outlineVariant: pal.outlineVariant
+
+    property var devTheme: ({
+        dark: !light, bg: surface, raised: container, hover: containerHigh, line: containerHighest, field: surface,
+        ink: ink, dim: inkDim, faint: outline, accent: primary, onAccent: onPrimary, selected: primaryContainer,
+        tag: tertiary, id: primary, comp: secondary, string: success, number: tertiary,
+        warn: secondary, error: light ? "#ba1a1a" : "#ffb4ab", ok: success,
+        errorRow: light ? "#ffdad6" : "#3b1a1a", warnRow: secondaryContainer, radius: 8,
+    })
+    onDevThemeChanged: debug.setTheme(devTheme)
+
+    property var now: new Date()
+    property var today: now.toDateString()
+    property int tab: 0
+    property int monthShift: 0
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+    Process { id: sys; command: "rexui-sys" }
+
+    Process { id: media; command: "rexui-media" }
+    Process {
+        id: vis; command: "rexui-visualiser"; running: dash.open && tab === 1
+        onRunningChanged: state = {}
+        onMessage: if (message && message.state && message.state.frames) send(heard)
+    }
+    property string heard: JSON.stringify({ bundle: media.state.bundle || "", muted: media.state.muted || [] })
+    property bool playerMuted: (media.state.muted || []).indexOf(media.state.bundle) >= 0
+    onHeardChanged: if (vis.running) vis.send(heard)
+    property bool active: !!media.state.active
+    property bool isPlaying: !!media.state.playing
+    property real progress: media.state.duration ? Math.min(1, (media.state.position || 0) / media.state.duration) : 0
+    property real seeking: -1
+    property string lyricsState: media.state.lyricsState || ""
+    property int lyricLine: media.state.line === undefined ? -1 : media.state.line
+    property bool pickPlayer: false
+    onTabChanged: pickPlayer = false
+    property real catSpeed: (vis.state.bpm || 120) / 300
+    function control(cmd) { media.send({ cmd: cmd }); }
+    property bool isOsu: media.state.bundle === "sh.ppy.osu.lazer"
+    property var best: isOsu ? media.state.best : null
+    function rankColor(r) { return ({ SS: "#de31ae", S: "#02b5c3", A: "#88da20", B: "#e3b130", C: "#ff8e5d", D: "#ff5a5a" })[r] || "#808080"; }
+    function rankInk(r, silver) {
+        if (r === "SS" || r === "S") return silver ? "#e4f2f8" : "#ffd04f";
+        return ({ A: "#275227", B: "#553a2b", C: "#473625", D: "#512525" })[r] || "#000000";
+    }
+    function mix(a, b, t) {
+        var out = "#";
+        for (var i = 1; i < 7; i += 2) {
+            var v = Math.round(parseInt(a.substr(i, 2), 16) * (1 - t) + parseInt(b.substr(i, 2), 16) * t);
+            out += (v < 16 ? "0" : "") + v.toString(16);
+        }
+        return out;
+    }
+    function starColor(s) {
+        var at = [0.1, 1.25, 2, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9];
+        var c = ["#4290fb", "#4fc0ff", "#4fffd5", "#7cff4f", "#f6f05c", "#ff8068", "#ff4e6f", "#c645b8", "#6563de", "#18158e", "#000000"];
+        if (s < at[0]) return "#aaaaaa";
+        for (var i = 1; i < at.length; i++) if (s < at[i]) return mix(c[i - 1], c[i], (s - at[i - 1]) / (at[i] - at[i - 1]));
+        return "#000000";
+    }
+    function starInk(s) { return s >= 6.5 ? "#ffd966" : "#1b1b1f"; }
+    function modColor(m) {
+        if (["EZ", "NF", "HT", "DC", "NR"].indexOf(m) >= 0) return "#b2ff66";
+        if (["HR", "SD", "PF", "DT", "NC", "HD", "FL", "BL", "ST", "AC"].indexOf(m) >= 0) return "#ff6666";
+        if (["AT", "CN", "RX", "AP", "SO"].indexOf(m) >= 0) return "#66ccff";
+        if (["TP", "DA", "CL", "RD", "MR", "AL", "SG"].indexOf(m) >= 0) return "#b366ff";
+        if (["TD", "SV2"].indexOf(m) >= 0) return "#808080";
+        return "#ff66aa";
+    }
+    function countColor(k) { return ({ great: "#66ccff", ok: "#b3d944", meh: "#ffcc22", miss: "#ed1121" })[k] || "#8cdcf2"; }
+    function thousands(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+    function albumText(stars) {
+        if (!media.state.difficulty) return media.state.album || qsTr("Unknown album");
+        return (stars && media.state.stars ? "★ " + media.state.stars.toFixed(2) + "  " : "") + "[" + media.state.difficulty + "]";
+    }
+
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    function underW(t) { return (i18n.language === "ja" ? [78, 45, 78, 23] : [64, 36, 75, 54])[t] + 8; }
+    function underX(t) { return t * 140 + (140 - underW(t)) / 2; }
+
+    function kanji(n) {
+        const d = ["〇", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+        if (n < 10) return d[n];
+        const t = Math.floor(n / 10) % 10, u = n % 10;
+        return (t > 1 ? d[t] : "") + "十" + (u ? d[u] : "");
+    }
+    property int slots: rex.tabs > 10 ? Math.max(20, rex.tabs) : 10
+    property int cell: slots > 10 ? 26 : 22
+    function short(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+    function pct(x) { return Math.round((x || 0) * 100) + "%"; }
+    function gb(bytes) { return ((bytes || 0) / 1073741824).toFixed(1) + " GB"; }
+    function rate(b) {
+        b = b || 0;
+        if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB/s";
+        if (b >= 1024) return (b / 1024).toFixed(0) + " KB/s";
+        return Math.round(b) + " B/s";
+    }
+    function mmss(s) {
+        s = Math.max(0, Math.floor(s || 0));
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+        return (h ? h + ":" + two(m) : m) + ":" + two(s % 60);
+    }
+    function uptime(s) {
+        s = Math.floor(s || 0);
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        return (d ? qsTr("%1d", d) + " " : "") + (d || h ? qsTr("%1h", h) + " " : "") + qsTr("%1m", m);
+    }
+
+    function month() {
+        const t = new Date(today);
+        const first = new Date(t.getFullYear(), t.getMonth() + monthShift, 1);
+        const start = new Date(first);
+        start.setDate(1 - (first.getDay() + 6) % 7);
+        const cells = [];
+        for (let i = 0; i < 42; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            cells.push({
+                day: d.getDate(),
+                inMonth: d.getMonth() === first.getMonth(),
+                today: d.toDateString() === today,
+                weekend: i % 7 >= 5,
+            });
+        }
+        return cells;
+    }
+    function monthTitle() {
+        const t = new Date(today);
+        const first = new Date(t.getFullYear(), t.getMonth() + monthShift, 1);
+        return first.toLocaleDateString(i18n.locale, { month: "long", year: "numeric" });
+    }
+
+    Stack {
+        Row {
+            halign: "left"; horizontalPadding: 12
+            visible: rex.tabs > 0
+            Rectangle {
+                radius: 13; color: container; animate: 240; easing: "standard"
+                horizontalPadding: 6; verticalPadding: 2
+                Row {
+                    spacing: 0
+                    Stack {
+                        Rectangle {
+                            radius: 10; horizontalPadding: 6; verticalPadding: 2; animate: 240; easing: "standard"
+                            Row {
+                                spacing: 5
+                                Icon { name: "rectangle.stack.fill"; font.size: 10; color: primary }
+                                Text { text: rex.session || qsTr("session"); font.size: 12; font.weight: "semibold"; color: sessionMenu.open ? primary : ink; colorAnimation: 90 }
+                            }
+                        }
+                        Drawer {
+                            id: sessionMenu
+                            hover: true
+                            onOpenChanged: if (open) tabMenu.open = false
+                            color: surface; rounding: 25
+                            padding: 14
+                            Column {
+                                width: 220; spacing: 2
+                                Row { horizontalPadding: 10; verticalPadding: 4; Text { text: qsTr("Sessions"); font.size: 11; font.weight: "semibold"; color: inkDim } }
+                                List {
+                                    spacing: 2; maxHeight: 320
+                                    model: rex.sessions
+                                    delegate: Stack {
+                                        property bool hot: rowButton.hovered || endButton.hovered
+                                        Rectangle {
+                                            radius: 10; horizontalPadding: 10; verticalPadding: 6
+                                            Row {
+                                                spacing: 8
+                                                Icon { name: modelData.id === rex.sessionId ? "rectangle.stack.fill" : "rectangle.stack"; font.size: 11; width: 14; color: modelData.id === rex.sessionId ? primary : inkDim }
+                                                Text { text: modelData.label || modelData.id; font.size: 13; font.weight: modelData.id === rex.sessionId ? "semibold" : "regular"; color: modelData.id === rex.sessionId ? primary : ink }
+                                                Item { grow: 1 }
+                                            }
+                                        }
+                                        Button {
+                                            id: rowButton
+                                            onClicked: {
+                                                sessionMenu.open = false;
+                                                if (modelData.id !== rex.sessionId) rex.run("session.select", { session_id: modelData.id });
+                                            }
+                                        }
+                                        Row {
+                                            halign: "right"; horizontalPadding: 6
+                                            Button {
+                                                id: endButton
+                                                icon: "xmark"; font.size: 10; font.bold: true; enabled: hot
+                                                color: hovered ? primary : inkDim; colorAnimation: 90
+                                                opacity: hot ? 1 : 0; animate: 160; easing: "standard"
+                                                onClicked: rex.closeSession(modelData.id)
+                                            }
+                                            Item { width: hot ? 0 : 8; animate: 160; easing: "standard" }
+                                        }
+                                    }
+                                }
+                                Rectangle { height: 1; color: outlineVariant; opacity: 0.5 }
+                                Stack {
+                                    Row {
+                                        spacing: 8; horizontalPadding: 10; verticalPadding: 6
+                                        Icon { name: "plus"; font.size: 11; width: 14; color: primary }
+                                        Text { text: qsTr("New Session"); font.size: 13; color: ink }
+                                    }
+                                    Button { onClicked: { sessionMenu.open = false; rex.run("session.new"); } }
+                                }
+                            }
+                        }
+                    }
+                    Text { text: "/"; font.size: 12; color: outline; animate: 240; easing: "standard" }
+                    Stack {
+                        animate: 240; easing: "standard"
+                        Rectangle {
+                            radius: 10; horizontalPadding: 6; verticalPadding: 2; animate: 240; easing: "standard"
+                            Row {
+                                spacing: 5
+                                Text { text: short(rex.titles[rex.tab - 1] || qsTr("tab"), 26); font.size: 12; color: tabMenu.open ? primary : inkDim; colorAnimation: 90 }
+                            }
+                        }
+                        Drawer {
+                            id: tabMenu
+                            hover: true
+                            onOpenChanged: if (open) sessionMenu.open = false
+                            color: surface; rounding: 25
+                            padding: 14
+                            property int peek: 0
+                            property int seen: 0
+                            onPeekChanged: if (peek > 0 && peek !== rex.tab) seen = peek
+                            Drawer {
+                                placement: "side"
+                                open: tabMenu.open && tabMenu.peek > 0 && tabMenu.peek !== rex.tab
+                                animation: 140
+                                color: surface; rounding: 20
+                                padding: 8
+                                TabPreview { width: previewWidth; tab: tabMenu.open ? tabMenu.seen : 0; radius: 12 }
+                            }
+                            Column {
+                                width: 260; spacing: 2
+                                Row { horizontalPadding: 10; verticalPadding: 4; Text { text: qsTr("Tabs"); font.size: 11; font.weight: "semibold"; color: inkDim } }
+                                List {
+                                    spacing: 2; maxHeight: 420
+                                    reveal: tabMenu.open ? rex.tab - 1 : -1
+                                    model: rex.titles
+                                    delegate: Stack {
+                                        property bool hot: rowButton.hovered || endButton.hovered
+                                        Rectangle {
+                                            radius: 10; horizontalPadding: 10; verticalPadding: 6
+                                            Row {
+                                                spacing: 8
+                                                Text { text: kanji(index + 1); font.size: 12; width: 22; align: "center"; font.weight: "bold"; color: index === rex.tab - 1 ? primary : inkDim }
+                                                Text { text: short(modelData || qsTr("tab"), 30); font.size: 13; font.weight: index === rex.tab - 1 ? "semibold" : "regular"; color: index === rex.tab - 1 ? primary : ink }
+                                            }
+                                        }
+                                        Button {
+                                            id: rowButton
+                                            onHoveredChanged: {
+                                                if (hovered) tabMenu.peek = index + 1;
+                                                else if (tabMenu.peek === index + 1) tabMenu.peek = 0;
+                                            }
+                                            onClicked: {
+                                                tabMenu.open = false;
+                                                if (index !== rex.tab - 1) rex.run("client.tab.goto", { index: index + 1 });
+                                            }
+                                        }
+                                        Row {
+                                            halign: "right"; horizontalPadding: 6
+                                            Button {
+                                                id: endButton
+                                                icon: "xmark"; font.size: 10; font.bold: true; enabled: hot
+                                                color: hovered ? primary : inkDim; colorAnimation: 90
+                                                opacity: hot ? 1 : 0; animate: 160; easing: "standard"
+                                                onClicked: rex.closeTab(index + 1)
+                                            }
+                                            Item { width: hot ? 0 : 8; animate: 160; easing: "standard" }
+                                        }
+                                    }
+                                }
+                                Rectangle { height: 1; color: outlineVariant; opacity: 0.5 }
+                                Stack {
+                                    Row {
+                                        spacing: 8; horizontalPadding: 10; verticalPadding: 6
+                                        Icon { name: "plus"; font.size: 11; width: 22; color: primary }
+                                        Text { text: qsTr("New Tab"); font.size: 13; color: ink }
+                                    }
+                                    Button { onClicked: { tabMenu.open = false; rex.run("client.tab.new"); } }
+                                }
+                            }
+                        }
+                    }
+                    Item { width: 6; animate: 240; easing: "standard" }
+                    Stack {
+                        width: slots * cell; height: 20; animate: 240; easing: "standard"
+                        Grid {
+                            columns: slots
+                            model: slots
+                            delegate: Stack {
+                                width: cell; height: 20
+                                Row {
+                                    halign: "center"
+                                    Text {
+                                        text: kanji(index + 1); font.size: slots > 10 ? 12 : 13
+                                        font.weight: index === rex.tab - 1 ? "bold" : "regular"; colorAnimation: 90
+                                        color: index === rex.tab - 1 ? primary : (index < rex.tabs ? ink : outline)
+                                        opacity: index < rex.tabs ? 1 : 0.4
+                                    }
+                                }
+                                Button {
+                                    enabled: index < rex.tabs
+                                    onHoveredChanged: {
+                                        if (hovered) numPeek.peek = index + 1;
+                                        else if (numPeek.peek === index + 1) numPeek.peek = 0;
+                                    }
+                                    onClicked: {
+                                        numPeek.open = false;
+                                        numPeek.seen = 0;
+                                        if (index !== rex.tab - 1) rex.run("client.tab.goto", { index: index + 1 });
+                                    }
+                                }
+                            }
+                        }
+                        Drawer {
+                            id: numPeek
+                            property int peek: 0
+                            property int seen: 0
+                            property bool want: !tabMenu.open && !sessionMenu.open && ((peek > 0 && peek !== rex.tab && peek <= rex.tabs) || (open && numPeekOver.hovered && seen > 0 && seen !== rex.tab))
+                            onPeekChanged: if (peek > 0 && peek !== rex.tab && peek <= rex.tabs) seen = peek
+                            property int tabNow: rex.tab
+                            onTabNowChanged: { peek = 0; numPeekOff.running = false; open = false; }
+                            onWantChanged: {
+                                numPeekOff.running = false;
+                                if (want) open = true;
+                                else numPeekOff.running = true;
+                            }
+                            shift: seen > 0 ? (seen - 0.5 - slots / 2) * cell : 0
+                            animation: 300
+                            color: surface; rounding: 20
+                            padding: 8
+                            Stack {
+                                Button {
+                                    id: numPeekOver; stateLayer: false; focusable: false
+                                    onClicked: {
+                                        const t = numPeek.seen;
+                                        numPeek.open = false;
+                                        numPeek.seen = 0;
+                                        if (t > 0 && t !== rex.tab) rex.run("client.tab.goto", { index: t });
+                                    }
+                                }
+                                TabPreview { width: peekWidth; tab: numPeek.seen; radius: 12 }
+                            }
+                        }
+                        Timer { id: numPeekOff; interval: 160; repeat: false; running: false; onTriggered: { running = false; if (!numPeek.want) numPeek.open = false; } }
+                    }
+                }
+            }
+        }
+
+        Row {
+            halign: "center"
+            Stack {
+                Rectangle {
+                    radius: 13; color: dash.open ? containerHigh : container
+                    horizontalPadding: 14; verticalPadding: 4
+                    Row {
+                        spacing: 8
+                        Icon { name: "clock.fill"; font.size: 12; color: primary }
+                        Row {
+                            spacing: 0
+                            Text { text: two(now.getHours()) + ":" + two(now.getMinutes()); font.mono: true; font.weight: "bold"; font.size: 13; color: ink }
+                            Text { text: two(now.getSeconds()); font.mono: true; font.size: 11; color: primary; opacity: 0.8 }
+                        }
+                        Text { text: "·"; opacity: 0.35; color: ink }
+                        Text {
+                            text: now.toLocaleDateString(i18n.locale, { weekday: "short", day: "numeric", month: "short" })
+                            font.size: 12; color: inkDim
+                        }
+                    }
+                }
+                Button { onClicked: dash.open = !dash.open }
+
+                Drawer {
+                    id: dash
+                    hover: true; key: "cmd+shift+space"
+                    onOpenChanged: { if (open) { media.send({ sync: true }); built = true; } else pickPlayer = false; }
+                    color: surface; rounding: 25
+                    padding: 18
+                    property bool built: false
+                    Loader {
+                        active: dash.open || dash.built
+                        delegate: Column {
+                            spacing: 14
+
+                            Column {
+                                halign: "center"; spacing: 5
+                                Row {
+                                    Stack {
+                                        width: 140
+                                        Rectangle {
+                                            radius: 14; verticalPadding: 7
+                                            Column {
+                                                halign: "center"; spacing: 5
+                                                Icon { name: "square.grid.2x2.fill"; font.size: 15; color: tab === 0 ? primary : inkDim; colorAnimation: 160 }
+                                                Text { text: qsTr("Dashboard"); font.size: 12; font.weight: "medium"; color: tab === 0 ? primary : inkDim; colorAnimation: 160 }
+                                            }
+                                        }
+                                        Button { stateColor: tab === 0 ? primary : ink; onClicked: tab = 0 }
+                                    }
+                                    Stack {
+                                        width: 140
+                                        Rectangle {
+                                            radius: 14; verticalPadding: 7
+                                            Column {
+                                                halign: "center"; spacing: 5
+                                                Icon { name: "music.note"; font.size: 15; color: tab === 1 ? primary : inkDim; colorAnimation: 160 }
+                                                Text { text: qsTr("Media"); font.size: 12; font.weight: "medium"; color: tab === 1 ? primary : inkDim; colorAnimation: 160 }
+                                            }
+                                        }
+                                        Button { stateColor: tab === 1 ? primary : ink; onClicked: tab = 1 }
+                                    }
+                                    Stack {
+                                        width: 140
+                                        Rectangle {
+                                            radius: 14; verticalPadding: 7
+                                            Column {
+                                                halign: "center"; spacing: 5
+                                                Icon { name: "gauge.with.dots.needle.67percent"; font.size: 15; color: tab === 2 ? primary : inkDim; colorAnimation: 160 }
+                                                Text { text: qsTr("Performance"); font.size: 12; font.weight: "medium"; color: tab === 2 ? primary : inkDim; colorAnimation: 160 }
+                                            }
+                                        }
+                                        Button { stateColor: tab === 2 ? primary : ink; onClicked: tab = 2 }
+                                    }
+                                    Stack {
+                                        width: 140
+                                        Rectangle {
+                                            radius: 14; verticalPadding: 7
+                                            Column {
+                                                halign: "center"; spacing: 5
+                                                Icon { name: "paintpalette.fill"; font.size: 15; color: tab === 3 ? primary : inkDim; colorAnimation: 160 }
+                                                Text { text: qsTr("Schemes"); font.size: 12; font.weight: "medium"; color: tab === 3 ? primary : inkDim; colorAnimation: 160 }
+                                            }
+                                        }
+                                        Button { stateColor: tab === 3 ? primary : ink; onClicked: tab = 3 }
+                                    }
+                                }
+                                Stack {
+                                    width: 560; height: 3
+                                    Row {
+                                        Item { width: underX(tab); height: 3 }
+                                        Rectangle { width: underW(tab); height: 3; radius: 1.5; color: primary; animate: 280; easing: "standard" }
+                                    }
+                                    Row {
+                                        Item { width: underX(tab); height: 3 }
+                                        Rectangle { width: underW(tab); height: 3; radius: 1.5; color: primary; animate: 520; easing: "standard" }
+                                    }
+                                }
+                            }
+
+                            Pages {
+                                current: tab; spacing: 40
+
+                                Row {
+                                    spacing: 12; valign: "stretch"; reorder: "dashboard"
+
+                                    Column {
+                                        spacing: 12
+                                        Rectangle {
+                                            width: 260; radius: 24; color: container; padding: 16
+                                            Row {
+                                                spacing: 14
+                                                Stack {
+                                                    width: 56; height: 56
+                                                    Rectangle {
+                                                        radius: 28; color: primary
+                                                        halign: "center"; valign: "center"
+                                                        Icon { name: "person.fill"; font.size: 26; color: onPrimary }
+                                                    }
+                                                    Image { source: prefs.state.face || ""; shape: "circle"; visible: !!prefs.state.face }
+                                                    Button { onClicked: facePicker.open() }
+                                                }
+                                                Column {
+                                                    grow: 1; spacing: 4
+                                                    Text { text: sys.state.user || "…"; font.size: 15; font.weight: "bold"; color: ink }
+                                                    Row { spacing: 6; Icon { name: "desktopcomputer"; font.size: 10; color: primary }; Text { grow: 1; text: sys.state.host || ""; font.size: 12; color: inkDim } }
+                                                    Row { spacing: 6; Icon { name: "apple.logo"; font.size: 10; color: primary }; Text { grow: 1; text: sys.state.os || ""; font.size: 12; color: inkDim } }
+                                                    Row { spacing: 6; Icon { name: "hourglass"; font.size: 10; color: primary }; Text { grow: 1; text: qsTr("up %1", uptime(sys.state.uptime)); font.size: 12; color: inkDim } }
+                                                }
+                                                Item { width: 28 }
+                                            }
+                                            Row {
+                                                halign: "right"; valign: "top"
+                                                Stack {
+                                                    Rectangle { width: 28; height: 28; radius: 14; color: containerHigh; halign: "center"; valign: "center"; Icon { name: "gearshape.fill"; font.size: 13; color: primary } }
+                                                    Button { onClicked: { dash.open = false; rex.run("client.settings"); } }
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            width: 260; radius: 24; color: container; padding: 18
+                                            Column {
+                                                halign: "center"; spacing: 2
+                                                Text { text: two(now.getHours()) + ":" + two(now.getMinutes()); font.size: 46; font.weight: "bold"; font.mono: true; color: primary }
+                                                Text { text: now.toLocaleDateString(i18n.locale, { weekday: "long" }); font.size: 14; color: ink }
+                                                Text { text: now.toLocaleDateString(i18n.locale, { day: "numeric", month: "long", year: "numeric" }); font.size: 12; color: inkDim }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 290; radius: 24; color: container; padding: 14
+                                        Column {
+                                            spacing: 8
+                                            Row {
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 30; height: 30; radius: 15; color: containerHigh; halign: "center"; valign: "center"
+                                                        Icon { name: "chevron.left"; font.size: 11; font.bold: true; color: ink }
+                                                    }
+                                                    Button { stateColor: ink; onClicked: monthShift = monthShift - 1 }
+                                                }
+                                                Item { grow: 1 }
+                                                Stack {
+                                                    Rectangle {
+                                                        height: 30; radius: 15; horizontalPadding: 12; valign: "center"
+                                                        color: monthShift ? secondaryContainer : "transparent"; colorAnimation: 160
+                                                        Row {
+                                                            spacing: 6
+                                                            Text { text: monthTitle(); font.size: 13; font.weight: "semibold"; color: monthShift ? onSecondaryContainer : ink; colorAnimation: 160 }
+                                                            Icon { name: "arrow.uturn.backward"; font.size: 10; font.bold: true; color: onSecondaryContainer; visible: monthShift !== 0 }
+                                                        }
+                                                    }
+                                                    Button { enabled: monthShift !== 0; stateColor: ink; onClicked: monthShift = 0 }
+                                                }
+                                                Item { grow: 1 }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 30; height: 30; radius: 15; color: containerHigh; halign: "center"; valign: "center"
+                                                        Icon { name: "chevron.right"; font.size: 11; font.bold: true; color: ink }
+                                                    }
+                                                    Button { stateColor: ink; onClicked: monthShift = monthShift + 1 }
+                                                }
+                                            }
+                                            Grid {
+                                                columns: 7; spacing: 4
+                                                model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+                                                delegate: Text { width: 34; text: qsTr(modelData); align: "center"; font.size: 11; font.weight: "semibold"; color: index >= 5 ? primary : outline }
+                                            }
+                                            Grid {
+                                                columns: 7; spacing: 4
+                                                model: month()
+                                                delegate: Rectangle {
+                                                    width: 34; height: 30; radius: 15
+                                                    color: modelData.today ? primary : "transparent"
+                                                    halign: "center"; valign: "center"
+                                                    Text {
+                                                        text: modelData.day; font.size: 12
+                                                        font.weight: modelData.today ? "bold" : "regular"
+                                                        color: modelData.today ? onPrimary : !modelData.inMonth ? outline : modelData.weekend ? secondary : ink
+                                                        opacity: modelData.inMonth ? 1 : 0.45
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        radius: 24; color: container; horizontalPadding: 18; verticalPadding: 16
+                                        Row {
+                                            spacing: 18; valign: "bottom"
+                                            Column {
+                                                width: 36; halign: "center"; spacing: 8
+                                                Stack {
+                                                    width: 12; height: 150; valign: "bottom"
+                                                    Rectangle { width: 12; height: 150; radius: 6; color: containerHigh }
+                                                    Rectangle { width: 12; height: Math.max(12, 150 * (sys.state.cpu || 0)); radius: 6; color: primary; animate: 600 }
+                                                }
+                                                Icon { name: "cpu"; font.size: 14; color: primary }
+                                                Text { width: 36; align: "center"; text: pct(sys.state.cpu); font.size: 11; color: inkDim }
+                                            }
+                                            Column {
+                                                width: 36; halign: "center"; spacing: 8
+                                                Stack {
+                                                    width: 12; height: 150; valign: "bottom"
+                                                    Rectangle { width: 12; height: 150; radius: 6; color: containerHigh }
+                                                    Rectangle { width: 12; height: Math.max(12, 150 * (sys.state.mem || 0)); radius: 6; color: secondary; animate: 600 }
+                                                }
+                                                Icon { name: "memorychip"; font.size: 14; color: secondary }
+                                                Text { width: 36; align: "center"; text: pct(sys.state.mem); font.size: 11; color: inkDim }
+                                            }
+                                            Column {
+                                                width: 36; halign: "center"; spacing: 8
+                                                Stack {
+                                                    width: 12; height: 150; valign: "bottom"
+                                                    Rectangle { width: 12; height: 150; radius: 6; color: containerHigh }
+                                                    Rectangle { width: 12; height: Math.max(12, 150 * (sys.state.disk || 0)); radius: 6; color: tertiary; animate: 600 }
+                                                }
+                                                Icon { name: "internaldrive"; font.size: 14; color: tertiary }
+                                                Text { width: 36; align: "center"; text: pct(sys.state.disk); font.size: 11; color: inkDim }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 200; radius: 56; color: container
+                                        Column {
+                                            halign: "center"; verticalPadding: 14
+                                            Stack {
+                                                width: 172; height: 172; halign: "center"; valign: "center"
+                                                Arc {
+                                                    value: seeking >= 0 ? seeking : progress; start: -180; sweep: 180; thickness: 6; gap: 8
+                                                    wavy: true; waves: 8; waving: isPlaying
+                                                    color: primary; track: secondaryContainer
+                                                    seekable: media.state.duration > 0 && media.state.seekable !== false
+                                                    onMoved: seeking = value
+                                                    onReleased: { media.send({ seek: value * media.state.duration }); seeking = -1; }
+                                                }
+                                                Stack {
+                                                    width: 132; height: 132
+                                                    Image { source: media.state.artwork || ""; shape: "cookie12"; spin: isPlaying ? 23500 : 0; color: containerHighest }
+                                                    Icon { name: "music.note"; font.size: 44; color: inkDim; visible: !media.state.artwork }
+                                                }
+                                                Stack {
+                                                    width: 150; height: 150; halign: "right"; valign: "bottom"; visible: active && !!media.state.rank
+                                                    Rectangle {
+                                                        width: 44; height: 22; radius: 11; halign: "center"; valign: "center"; color: rankColor(media.state.rank)
+                                                        Text { text: media.state.rank || ""; font.size: 13; font.weight: "heavy"; color: rankInk(media.state.rank, media.state.rankSilver) }
+                                                    }
+                                                }
+                                            }
+                                            Item { height: 10 }
+                                            Text {
+                                                width: 168; align: "center"; font.size: 14; font.weight: "medium"; color: primary
+                                                text: active ? media.state.title || qsTr("Unknown title") : qsTr("No media")
+                                            }
+                                            Item { height: 6 }
+                                            Text { width: 168; align: "center"; font.size: 12; color: outline; text: active ? albumText(true) : qsTr("No media") }
+                                            Item { height: 6 }
+                                            Text { width: 168; align: "center"; font.size: 13; color: secondary; text: active ? media.state.artist || qsTr("Unknown artist") : qsTr("No media") }
+                                            Item { height: 12 }
+                                            Row {
+                                                width: 168; spacing: 4
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 40; height: 40; radius: 20; color: secondaryContainer; halign: "center"; valign: "center"
+                                                        Icon { name: "backward.fill"; font.size: 15; color: active ? onSecondaryContainer : outline }
+                                                    }
+                                                    Button { enabled: active; onClicked: control("previous") }
+                                                }
+                                                Stack {
+                                                    grow: 1
+                                                    Rectangle {
+                                                        height: 40; radius: isPlaying ? 12 : 20; color: primary; halign: "center"; valign: "center"; animate: 200
+                                                        Icon { name: isPlaying ? "pause.fill" : "play.fill"; font.size: 16; color: onPrimary }
+                                                    }
+                                                    Button { enabled: active; onClicked: control("toggle") }
+                                                }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 40; height: 40; radius: 20; color: secondaryContainer; halign: "center"; valign: "center"
+                                                        Icon { name: "forward.fill"; font.size: 15; color: active ? onSecondaryContainer : outline }
+                                                    }
+                                                    Button { enabled: active; onClicked: control("next") }
+                                                }
+                                            }
+                                            Item { height: 8 }
+                                            Image { source: "assets/bongocat.gif"; width: 136; height: 86; fit: "contain"; playing: isPlaying; speed: catSpeed }
+                                            Item { grow: 1 }
+                                        }
+                                    }
+                                }
+
+                                Stack {
+                                    width: 1000; height: 320; radius: 20
+
+                                    Shapes {
+                                        moving: isPlaying
+                                        colors: [primaryContainer, secondaryContainer, tertiary, outlineVariant]
+                                        opacities: light ? [0.34, 0.34, 0.08, 0.2] : [0.16, 0.16, 0.04, 0.16]
+                                    }
+
+                                    Row {
+                                        padding: 16; spacing: 28
+
+                                        Stack {
+                                            width: 300; height: 288; halign: "center"; valign: "center"
+                                            Visualiser {
+                                                frames: vis.running ? vis.state.frames || "" : ""
+                                                cover: 200; gap: 12; shape: "cookie9"; spin: isPlaying ? 23500 : 0
+                                                color: primary
+                                            }
+                                            Stack {
+                                                width: 200; height: 200
+                                                Image { source: media.state.artwork || ""; shape: "cookie9"; spin: isPlaying ? 23500 : 0; color: containerHighest }
+                                                Icon { name: "music.note"; font.size: 64; color: inkDim; visible: !media.state.artwork }
+                                            }
+                                        }
+
+                                        Stack {
+                                            grow: 1
+
+                                            Column {
+                                                visible: !active
+                                                halign: "center"; valign: "center"; spacing: 8
+                                                Rectangle {
+                                                    width: 88; height: 88; radius: 30; color: primaryContainer; halign: "center"; valign: "center"
+                                                    Icon { name: "music.note.list"; font.size: 34; color: onPrimaryContainer }
+                                                }
+                                                Item { height: 4 }
+                                                Text { text: qsTr("Nothing playing"); font.size: 28; color: ink }
+                                                Text { text: qsTr("Play something for it to show up here!"); font.size: 16; color: inkDim }
+                                            }
+
+                                            Row {
+                                                visible: active
+                                                spacing: 28
+
+                                                Column {
+                                                    grow: 1; valign: "center"; spacing: 4
+                                                    Text { width: 340; text: media.state.title || qsTr("Unknown title"); font.size: 22; color: ink }
+                                                    Text { width: 340; text: media.state.artist || qsTr("Unknown artist"); font.size: 16; color: inkDim }
+                                                    Row {
+                                                        spacing: 8
+                                                        Rectangle {
+                                                            width: 48; height: 24; radius: 12; halign: "center"; valign: "center"; color: rankColor(media.state.rank); visible: !!media.state.rank
+                                                            Text { text: media.state.rank || ""; font.size: 14; font.weight: "heavy"; color: rankInk(media.state.rank, media.state.rankSilver) }
+                                                        }
+                                                        Rectangle {
+                                                            height: 22; radius: 11; horizontalPadding: 8; valign: "center"; color: starColor(media.state.stars || 0); visible: !!media.state.stars
+                                                            Row {
+                                                                spacing: 3
+                                                                Icon { name: "star.fill"; font.size: 9; color: starInk(media.state.stars || 0) }
+                                                                Text { text: (media.state.stars || 0).toFixed(2); font.size: 12; font.weight: "bold"; color: starInk(media.state.stars || 0) }
+                                                            }
+                                                        }
+                                                        Text { grow: 1; text: albumText(false); font.size: 16; color: secondary }
+                                                    }
+                                                    Item { height: 28 }
+                                                    Row {
+                                                        spacing: 8
+                                                        Text { width: 44; align: "center"; font.size: 12; color: inkDim; text: mmss(seeking >= 0 ? seeking * media.state.duration : media.state.position) }
+                                                        Stack {
+                                                            grow: 1; height: 24
+                                                            Arc {
+                                                                line: true; value: seeking >= 0 ? seeking : progress
+                                                                wavy: true; waves: 5; waving: isPlaying; thickness: 6; gap: 6
+                                                                color: primary; track: secondaryContainer
+                                                                seekable: media.state.duration > 0 && media.state.seekable !== false
+                                                                onMoved: seeking = value
+                                                                onReleased: { media.send({ seek: value * media.state.duration }); seeking = -1; }
+                                                            }
+                                                        }
+                                                        Text { width: 44; align: "center"; font.size: 12; color: inkDim; text: media.state.duration > 0 ? mmss(media.state.duration) : "--:--" }
+                                                    }
+                                                    Item { height: 20 }
+                                                    Row {
+                                                        spacing: 4
+                                                        Stack {
+                                                            Rectangle {
+                                                                width: 40; height: 44; radius: media.state.shuffle ? 14 : 20; color: media.state.shuffle ? secondary : secondaryContainer; halign: "center"; valign: "center"; animate: 200
+                                                                Icon { name: "shuffle"; font.size: 14; color: media.state.shuffle ? onSecondary : onSecondaryContainer }
+                                                            }
+                                                            Button { onClicked: control("shuffle") }
+                                                        }
+                                                        Stack {
+                                                            Rectangle {
+                                                                width: 44; height: 44; radius: 22; color: secondaryContainer; halign: "center"; valign: "center"
+                                                                Icon { name: "backward.fill"; font.size: 17; color: onSecondaryContainer }
+                                                            }
+                                                            Button { onClicked: control("previous") }
+                                                        }
+                                                        Stack {
+                                                            grow: 1
+                                                            Rectangle {
+                                                                height: 44; radius: isPlaying ? 14 : 22; color: primary; halign: "center"; valign: "center"; animate: 200
+                                                                Icon { name: isPlaying ? "pause.fill" : "play.fill"; font.size: 18; color: onPrimary }
+                                                            }
+                                                            Button { onClicked: control("toggle") }
+                                                        }
+                                                        Stack {
+                                                            Rectangle {
+                                                                width: 44; height: 44; radius: 22; color: secondaryContainer; halign: "center"; valign: "center"
+                                                                Icon { name: "forward.fill"; font.size: 17; color: onSecondaryContainer }
+                                                            }
+                                                            Button { onClicked: control("next") }
+                                                        }
+                                                        Stack {
+                                                            Rectangle {
+                                                                width: 40; height: 44; radius: media.state.repeat ? 14 : 20; color: media.state.repeat ? secondary : secondaryContainer; halign: "center"; valign: "center"; animate: 200
+                                                                Icon { name: media.state.repeat === 1 ? "repeat.1" : "repeat"; font.size: 14; color: media.state.repeat ? onSecondary : onSecondaryContainer }
+                                                            }
+                                                            Button { onClicked: control("repeat") }
+                                                        }
+                                                    }
+                                                }
+
+                                                Column {
+                                                    width: 300; height: 288; spacing: 10
+                                                    Row {
+                                                        spacing: 8
+                                                        Icon { name: isOsu ? "trophy" : "quote.bubble"; font.size: 15; color: ink }
+                                                        Text { text: isOsu ? qsTr("Best play") : qsTr("Lyrics"); font.size: 16; color: ink }
+                                                        Item { grow: 1 }
+                                                        Text { text: lyricsState === "found" && !isOsu ? "LRCLIB" : ""; font.size: 11; color: outline }
+                                                    }
+                                                    Stack {
+                                                        grow: 1
+                                                        List {
+                                                            visible: lyricsState === "found"
+                                                            model: media.state.lyrics || []
+                                                            reveal: Math.max(0, lyricLine); revealAlign: "center"; revealAnimation: 600
+                                                            fade: 0.1; spacing: 8; verticalPadding: 24
+                                                            delegate: Stack {
+                                                                Text {
+                                                                    wrap: true; font.size: 14; text: modelData.text || ". . ."
+                                                                    color: index === lyricLine ? primary : outline
+                                                                    font.weight: index === lyricLine ? "medium" : "regular"
+                                                                }
+                                                                Button { onClicked: media.send({ seek: modelData.t }) }
+                                                            }
+                                                        }
+                                                        Column {
+                                                            visible: lyricsState === "loading"
+                                                            halign: "center"; valign: "center"; spacing: 12
+                                                            Rectangle {
+                                                                width: 76; height: 76; radius: 38; color: primaryContainer; halign: "center"; valign: "center"
+                                                                Icon { name: "ellipsis"; font.size: 26; color: onPrimaryContainer }
+                                                            }
+                                                            Text { text: qsTr("Loading lyrics..."); font.size: 16; color: inkDim }
+                                                        }
+                                                        Column {
+                                                            visible: lyricsState !== "found" && lyricsState !== "loading" && !isOsu
+                                                            halign: "center"; valign: "center"; spacing: 8
+                                                            Text { text: ">_<"; font.size: 30; font.weight: "bold"; color: outline }
+                                                            Text { text: qsTr("No lyrics found"); font.size: 16; color: outline }
+                                                        }
+                                                        Column {
+                                                            visible: isOsu && !best
+                                                            halign: "center"; valign: "center"; spacing: 8
+                                                            Icon { name: "trophy"; font.size: 34; color: outline }
+                                                            Text { text: qsTr("No plays on this difficulty yet"); font.size: 16; color: outline }
+                                                        }
+                                                        Column {
+                                                            visible: !!best; spacing: 8
+                                                            Row {
+                                                                spacing: 14
+                                                                Stack {
+                                                                    width: 84; height: 84; halign: "center"; valign: "center"
+                                                                    Arc { width: 84; height: 84; value: best ? best.accuracy : 0; thickness: 7; gap: 0; dot: false; color: "#8ff0d8"; track: "#00000000" }
+                                                                    Arc { width: 68; height: 68; value: 1; start: -90 + 1.5; sweep: 252 - 3; thickness: 3; gap: 0; dot: false; color: rankColor("D"); track: "#00000000" }
+                                                                    Arc { width: 68; height: 68; value: 1; start: 162 + 1.5; sweep: 36 - 3; thickness: 3; gap: 0; dot: false; color: rankColor("C"); track: "#00000000" }
+                                                                    Arc { width: 68; height: 68; value: 1; start: 198 + 1.5; sweep: 36 - 3; thickness: 3; gap: 0; dot: false; color: rankColor("B"); track: "#00000000" }
+                                                                    Arc { width: 68; height: 68; value: 1; start: 234 + 1.5; sweep: 18 - 3; thickness: 3; gap: 0; dot: false; color: rankColor("A"); track: "#00000000" }
+                                                                    Arc { width: 68; height: 68; value: 1; start: 252 + 1.5; sweep: 18 - 3; thickness: 3; gap: 0; dot: false; color: rankColor("S"); track: "#00000000" }
+                                                                    Text { text: best ? best.rank : ""; font.size: 30; font.weight: "heavy"; color: best ? rankColor(best.rank) : ink }
+                                                                }
+                                                                Column {
+                                                                    valign: "center"; spacing: 6
+                                                                    Text { text: best ? thousands(best.score) : ""; font.size: 26; font.weight: "light"; color: ink }
+                                                                    Row {
+                                                                        spacing: 4
+                                                                        Rectangle {
+                                                                            height: 18; radius: 9; horizontalPadding: 6; valign: "center"; color: starColor(media.state.stars || 0); visible: !!media.state.stars
+                                                                            Row {
+                                                                                spacing: 2
+                                                                                Icon { name: "star.fill"; font.size: 8; color: starInk(media.state.stars || 0) }
+                                                                                Text { text: (media.state.stars || 0).toFixed(2); font.size: 10; font.weight: "bold"; color: starInk(media.state.stars || 0) }
+                                                                            }
+                                                                        }
+                                                                        Rectangle {
+                                                                            height: 18; radius: 5; horizontalPadding: 6; valign: "center"; visible: !!best && best.mods.length > 0; color: modColor(best && best.mods[0])
+                                                                            Text { text: best && best.mods[0] || ""; font.size: 10; font.weight: "heavy"; color: "#1b1b1f" }
+                                                                        }
+                                                                        Rectangle {
+                                                                            height: 18; radius: 5; horizontalPadding: 6; valign: "center"; visible: !!best && best.mods.length > 1; color: modColor(best && best.mods[1])
+                                                                            Text { text: best && best.mods[1] || ""; font.size: 10; font.weight: "heavy"; color: "#1b1b1f" }
+                                                                        }
+                                                                        Rectangle {
+                                                                            height: 18; radius: 5; horizontalPadding: 6; valign: "center"; visible: !!best && best.mods.length > 2; color: modColor(best && best.mods[2])
+                                                                            Text { text: best && best.mods[2] || ""; font.size: 10; font.weight: "heavy"; color: "#1b1b1f" }
+                                                                        }
+                                                                        Rectangle {
+                                                                            height: 18; radius: 5; horizontalPadding: 6; valign: "center"; visible: !!best && best.mods.length > 3; color: modColor(best && best.mods[3])
+                                                                            Text { text: best && best.mods.length > 4 ? "+" + (best.mods.length - 3) : best && best.mods[3] || ""; font.size: 10; font.weight: "heavy"; color: "#1b1b1f" }
+                                                                        }
+                                                                    }
+                                                                    Row {
+                                                                        spacing: 6
+                                                                        Column {
+                                                                            width: 94; spacing: 2
+                                                                            Rectangle { height: 14; radius: 7; color: containerHighest; halign: "center"; valign: "center"; Text { text: "ACCURACY"; font.size: 8; font.weight: "semibold"; color: inkDim } }
+                                                                            Text { align: "center"; text: best ? (best.accuracy * 100).toFixed(2) + "%" : ""; font.size: 13; color: ink }
+                                                                        }
+                                                                        Column {
+                                                                            width: 94; spacing: 2
+                                                                            Rectangle { height: 14; radius: 7; color: containerHighest; halign: "center"; valign: "center"; Text { text: "MAX COMBO"; font.size: 8; font.weight: "semibold"; color: inkDim } }
+                                                                            Text { align: "center"; text: best ? best.combo + " / " + best.maxCombo : ""; font.size: 13; color: ink }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            Grid {
+                                                                columns: 4; spacing: 6
+                                                                model: best ? best.counts : []
+                                                                delegate: Column {
+                                                                    spacing: 2
+                                                                    Rectangle {
+                                                                        height: 14; radius: 7; color: containerHighest; halign: "center"; valign: "center"
+                                                                        Text { text: modelData.label; font.size: 8; font.weight: "semibold"; color: countColor(modelData.kind) }
+                                                                    }
+                                                                    Text { align: "center"; text: modelData.max >= 0 ? modelData.value + " / " + modelData.max : String(modelData.value); font.size: 13; color: ink }
+                                                                }
+                                                            }
+                                                            Row {
+                                                                spacing: 5; halign: "center"
+                                                                Icon { name: "calendar"; font.size: 10; color: outline }
+                                                                Text { text: best ? best.played : ""; font.size: 10; color: outline }
+                                                            }
+                                                        }
+                                                        Column {
+                                                            valign: "bottom"
+                                                            Rectangle {
+                                                                radius: 20; color: primary; padding: 6
+                                                                expanded: pickPlayer; expandFrom: "bottom"; animate: 260; easing: "standard"
+                                                                onPressedOutside: pickPlayer = false
+                                                                Column {
+                                                                    spacing: 2
+                                                                    Item { horizontalPadding: 8; verticalPadding: 4; Text { text: qsTr("Players"); font.size: 11; font.weight: "medium"; color: onPrimary; opacity: 0.7 } }
+                                                                    List {
+                                                                        model: media.state.players || []; maxHeight: 180
+                                                                        delegate: Stack {
+                                                                            property bool muted: (media.state.muted || []).indexOf(modelData.bundle) >= 0
+                                                                            Rectangle { radius: 14; color: onPrimary; opacity: modelData.bundle === media.state.bundle ? 0.16 : 0; animate: 200 }
+                                                                            Row {
+                                                                                spacing: 8; horizontalPadding: 8; verticalPadding: 7
+                                                                                Image { source: modelData.icon || ""; width: 18; height: 18; opacity: muted ? 0.5 : 1; animate: 160 }
+                                                                                Text { grow: 1; text: modelData.name; font.size: 13; font.weight: modelData.bundle === media.state.bundle ? "medium" : "regular"; color: onPrimary }
+                                                                                Icon { name: "checkmark"; font.size: 11; font.bold: true; color: onPrimary; visible: modelData.bundle === media.state.bundle }
+                                                                                Item { width: 24 }
+                                                                            }
+                                                                            Button { stateColor: onPrimary; enabled: pickPlayer; onClicked: { media.send({ pick: modelData.bundle }); pickPlayer = false; } }
+                                                                            Row {
+                                                                                halign: "right"; valign: "center"; horizontalPadding: 4
+                                                                                Button {
+                                                                                    width: 26; height: 26; stateColor: onPrimary; enabled: pickPlayer
+                                                                                    icon: muted ? "speaker.slash.fill" : "speaker.wave.2.fill"; font.size: 11; color: onPrimary
+                                                                                    opacity: muted ? 1 : 0.6; animate: 160
+                                                                                    onClicked: media.send({ mute: modelData.bundle, on: !muted })
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            Item { height: 8 }
+                                                        }
+                                                    }
+                                                    Row {
+                                                        halign: "center"
+                                                        Stack {
+                                                            animate: 240; easing: "standard"
+                                                            Rectangle {
+                                                                height: 40; radius: 20; color: primary; horizontalPadding: 16; valign: "center"; colorAnimation: 200
+                                                                animate: 240; easing: "standard"
+                                                                Row {
+                                                                    spacing: 8
+                                                                    Image { source: media.state.playerIcon || ""; width: 20; height: 20; visible: !!media.state.playerIcon }
+                                                                    Row {
+                                                                        spacing: 0
+                                                                        Text { text: media.state.player || qsTr("No players"); font.size: 13; font.weight: "medium"; color: onPrimary }
+                                                                        Item {
+                                                                            width: playerMuted ? 23 : 0; height: 14; valign: "center"; animate: 240; easing: "standard"
+                                                                            Row {
+                                                                                halign: "right"; valign: "center"
+                                                                                Icon { name: "speaker.slash.fill"; font.size: 11; color: onPrimary; opacity: playerMuted ? 1 : 0; animate: 200 }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    Icon { name: pickPlayer ? "chevron.down" : "chevron.up"; font.size: 11; font.bold: true; color: onPrimary; animate: 240; easing: "standard" }
+                                                                }
+                                                            }
+                                                            Button { enabled: !pickPlayer && (media.state.players || []).length > 0; onClicked: pickPlayer = true }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Grid {
+                                    columns: 2; spacing: 12; reorder: "performance"
+
+                                    Rectangle {
+                                        width: 276; radius: 24; color: container; padding: 18
+                                        Column {
+                                            spacing: 10
+                                            Row { spacing: 8; Icon { name: "cpu"; font.size: 16; color: primary }; Text { text: "CPU"; font.size: 14; font.weight: "bold"; color: ink }; Item { grow: 1 }; Text { text: pct(sys.state.cpu); font.size: 22; font.weight: "bold"; color: primary } }
+                                            Stack {
+                                                height: 10; halign: "left"
+                                                Rectangle { width: 240; height: 10; radius: 5; color: containerHigh }
+                                                Rectangle { width: Math.max(10, 240 * (sys.state.cpu || 0)); height: 10; radius: 5; color: primary; animate: 600 }
+                                            }
+                                            Text { text: qsTr("%1 cores · load %2", sys.state.cores || 0, (sys.state.load || 0).toFixed(2)); font.size: 12; color: inkDim }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 276; radius: 24; color: container; padding: 18
+                                        Column {
+                                            spacing: 10
+                                            Row { spacing: 8; Icon { name: "memorychip"; font.size: 16; color: secondary }; Text { text: qsTr("Memory"); font.size: 14; font.weight: "bold"; color: ink }; Item { grow: 1 }; Text { text: pct(sys.state.mem); font.size: 22; font.weight: "bold"; color: secondary } }
+                                            Stack {
+                                                height: 10; halign: "left"
+                                                Rectangle { width: 240; height: 10; radius: 5; color: containerHigh }
+                                                Rectangle { width: Math.max(10, 240 * (sys.state.mem || 0)); height: 10; radius: 5; color: secondary; animate: 600 }
+                                            }
+                                            Text { text: qsTr("%1 of %2", gb(sys.state.memUsed), gb(sys.state.memTotal)); font.size: 12; color: inkDim }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 276; radius: 24; color: container; padding: 18
+                                        Column {
+                                            spacing: 10
+                                            Row { spacing: 8; Icon { name: "internaldrive"; font.size: 16; color: tertiary }; Text { text: qsTr("Disk"); font.size: 14; font.weight: "bold"; color: ink }; Item { grow: 1 }; Text { text: pct(sys.state.disk); font.size: 22; font.weight: "bold"; color: tertiary } }
+                                            Stack {
+                                                height: 10; halign: "left"
+                                                Rectangle { width: 240; height: 10; radius: 5; color: containerHigh }
+                                                Rectangle { width: Math.max(10, 240 * (sys.state.disk || 0)); height: 10; radius: 5; color: tertiary; animate: 600 }
+                                            }
+                                            Text { text: qsTr("%1 of %2", gb(sys.state.diskUsed), gb(sys.state.diskTotal)); font.size: 12; color: inkDim }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 276; radius: 24; color: container; padding: 18
+                                        Column {
+                                            spacing: 10
+                                            Row { spacing: 8; Icon { name: "network"; font.size: 16; color: success }; Text { text: qsTr("Network"); font.size: 14; font.weight: "bold"; color: ink } }
+                                            Row { spacing: 8; Icon { name: "arrow.down"; font.size: 12; color: success }; Text { text: rate(sys.state.netIn); font.size: 18; font.weight: "bold"; color: ink } }
+                                            Row { spacing: 8; Icon { name: "arrow.up"; font.size: 12; color: success }; Text { text: rate(sys.state.netOut); font.size: 18; font.weight: "bold"; color: ink } }
+                                        }
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 14
+                                    Row {
+                                        spacing: 12
+                                        Text { text: qsTr("Mode"); font.size: 13; font.weight: "medium"; color: ink }
+                                        Rectangle {
+                                            radius: 17; color: container; padding: 3
+                                            Row {
+                                                spacing: 2
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 84; height: 28; radius: 14; halign: "center"; valign: "center"
+                                                        color: scheme === "auto" ? secondaryContainer : "transparent"; colorAnimation: 160
+                                                        Row {
+                                                            spacing: 6
+                                                            Icon { name: "circle.lefthalf.filled"; font.size: 11; color: scheme === "auto" ? onSecondaryContainer : inkDim }
+                                                            Text { text: qsTr("Auto"); font.size: 12; font.weight: "medium"; color: scheme === "auto" ? onSecondaryContainer : inkDim; colorAnimation: 160 }
+                                                        }
+                                                    }
+                                                    Button { stateColor: ink; onClicked: prefs.send({ set: { scheme: "auto" } }) }
+                                                }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 84; height: 28; radius: 14; halign: "center"; valign: "center"
+                                                        color: scheme === "dark" ? secondaryContainer : "transparent"; colorAnimation: 160
+                                                        Row {
+                                                            spacing: 6
+                                                            Icon { name: "moon.fill"; font.size: 11; color: scheme === "dark" ? onSecondaryContainer : inkDim }
+                                                            Text { text: qsTr("Dark"); font.size: 12; font.weight: "medium"; color: scheme === "dark" ? onSecondaryContainer : inkDim; colorAnimation: 160 }
+                                                        }
+                                                    }
+                                                    Button { stateColor: ink; onClicked: prefs.send({ set: { scheme: "dark" } }) }
+                                                }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 84; height: 28; radius: 14; halign: "center"; valign: "center"
+                                                        color: scheme === "light" ? secondaryContainer : "transparent"; colorAnimation: 160
+                                                        Row {
+                                                            spacing: 6
+                                                            Icon { name: "sun.max.fill"; font.size: 11; color: scheme === "light" ? onSecondaryContainer : inkDim }
+                                                            Text { text: qsTr("Light"); font.size: 12; font.weight: "medium"; color: scheme === "light" ? onSecondaryContainer : inkDim; colorAnimation: 160 }
+                                                        }
+                                                    }
+                                                    Button { stateColor: ink; onClicked: prefs.send({ set: { scheme: "light" } }) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    List {
+                                        model: schemeRows(); maxHeight: 440; fade: 0.04; spacing: 6; gutter: 0
+                                        reveal: schemeRows().findIndex((r) => (r.row || []).includes(current()))
+                                        delegate: Column {
+                                            Row {
+                                                visible: !!modelData.title; horizontalPadding: 10; verticalPadding: 4
+                                                Text { text: modelData.title || ""; font.size: 12; font.weight: "medium"; color: outline }
+                                            }
+                                            Grid {
+                                                visible: !modelData.title
+                                                columns: schemeColumns; spacing: 6
+                                                model: modelData.row || []
+                                                delegate: Stack {
+                                                    width: 220
+                                                    Rectangle { visible: !!modelData; radius: 16; color: modelData === current() ? containerHigh : "transparent" }
+                                                    Row {
+                                                        visible: !!modelData
+                                                        horizontalPadding: 10; verticalPadding: 8; spacing: 12
+                                                        Rectangle {
+                                                            width: 34; height: 34; radius: 17; halign: "right"
+                                                            color: modelData ? pick(modelData, light).surface : "transparent"
+                                                            border.width: 1; border.color: modelData ? pick(modelData, light).outline : "transparent"
+                                                            Rectangle { width: 17; color: modelData ? pick(modelData, light).primary : "transparent" }
+                                                        }
+                                                        Column {
+                                                            Text { text: (modelData.split("/")[1] || "").replace(/-/g, " "); font.size: 13; color: ink }
+                                                            Text { text: modelData.split("/")[0]; font.size: 11; color: outline }
+                                                        }
+                                                        Item { grow: 1 }
+                                                        Icon { name: "checkmark"; font.size: 13; font.bold: true; color: inkDim; visible: modelData === current() }
+                                                    }
+                                                    Button { visible: !!modelData; onClicked: prefs.send({ set: { palette: modelData } }) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Row {
+            halign: "right"; horizontalPadding: 12
+            Rectangle {
+                radius: 13; color: container
+                horizontalPadding: 12; verticalPadding: 4
+                Row {
+                    spacing: 8
+                    Icon { name: "cpu"; font.size: 11; color: primary }
+                    Text { width: 30; align: "right"; text: pct(sys.state.cpu); font.mono: true; font.size: 12; color: ink }
+                    Text { text: "·"; opacity: 0.35; color: ink }
+                    Icon { name: "memorychip"; font.size: 11; color: secondary }
+                    Text { width: 30; align: "right"; text: pct(sys.state.mem); font.mono: true; font.size: 12; color: ink }
+                    Text { text: "·"; opacity: 0.35; color: ink }
+                    Icon { name: "speedometer"; font.size: 11; color: tertiary }
+                    Text { width: 52; align: "right"; text: rex.fps ? rex.fps + " fps" : "… fps"; font.mono: true; font.size: 12; color: ink }
+                }
+            }
+        }
+    }
+}

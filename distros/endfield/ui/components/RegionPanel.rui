@@ -1,0 +1,97 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Rectangle {
+    id: rp
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property var region: ({})
+    property bool compact: false
+    property string shaders: "~/.config/rex/distros/endfield/ui/shaders/"
+    property var finds: [["shippingbox.fill", qsTr("Chests"), rp.region.chests || 0], ["puzzlepiece.fill", qsTr("Puzzles"), rp.region.puzzles || 0],
+                         ["square.stack.3d.up.fill", qsTr("Pieces"), rp.region.pieces || 0], ["cube.fill", qsTr("Black boxes"), rp.region.blackboxes || 0]]
+    property int found: rp.finds.reduce((a, f) => a + f[2], 0)
+    shape: cut; color: container; border.width: 1; border.color: hairline
+    Shader { source: rp.shaders + "contour.metal"; running: motion; fps: 24; params: [10, 150, 0.012, 0.6, 0, 0.45]; colors: [alpha(teal, 0.2), alpha(teal, 0.45)] }
+    Column {
+        padding: rp.compact ? 10 : 14; spacing: 12
+        Row {
+            spacing: rp.compact ? 10 : 14; valign: "center"
+            Stack {
+                width: rp.compact ? 48 : 62; height: rp.compact ? 48 : 62
+                Path { d: "M0.3 0 H0.7 L1 0.3 V0.7 L0.7 1 H0.3 L0 0.7 V0.3 Z"; stroke: teal; strokeWidth: 1.5; fill: alpha(surface, 0.7) }
+                Path { d: "M0.33 0.08 H0.67 L0.92 0.33 V0.67 L0.67 0.92 H0.33 L0.08 0.67 V0.33 Z"; stroke: alpha(teal, 0.35); strokeWidth: 1 }
+                Column { halign: "center"; valign: "center"; spacing: -3
+                    Text { text: "LV"; align: "center"; font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8; color: teal }
+                    Text { text: two(rp.region.level || 0); align: "center"; font.family: fontNum; font.size: rp.compact ? 19 : 24; font.tabular: true; color: ink } }
+            }
+            Column { grow: 1; spacing: 3
+                Text { text: caps(qsTr("Region")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.2; color: teal }
+                Text { text: caps(rp.region.name || ""); font.family: fontWide; font.width: "expanded"; font.weight: "bold"; font.size: rp.compact ? 14 : 17; font.letterSpacing: 0.6; color: ink; maxLines: 1 }
+                Text { text: caps(qsTr("%1 settlements  ·  %2 found", (rp.region.settlements || []).length, rp.found)); font.family: fontMono; font.mono: true; font.size: 9.5; font.letterSpacing: 0.3; color: inkDim; maxLines: 1 } }
+        }
+        Grid {
+            columns: 1; spacing: 0
+            model: rp.region.settlements || []
+            delegate: Column {
+                Row { verticalPadding: 6; spacing: 8; valign: "center"
+                    Diamond { on: modelData.level > 0; tint: teal; size: 7 }
+                    Text { grow: 1; text: modelData.name; font.family: fontUi; font.size: 12.5; color: modelData.level ? ink : inkDim; maxLines: 1 }
+                    Text { text: "LV | " + two(modelData.level || 0); font.family: fontNum; font.size: 12.5; font.tabular: true; color: modelData.level ? teal : caption } }
+                Rectangle { height: 1; color: alpha(hairline, 0.7) }
+            }
+        }
+        Grid {
+            columns: rp.compact ? 2 : 4; spacing: 4
+            model: rp.finds
+            delegate: Stack {
+                Rectangle { shape: cutPlate; color: alpha(surface, 0.75); border.width: 1; border.color: modelData[2] ? alpha(teal, 0.5) : hairline }
+                Column { padding: 8; spacing: 3; halign: "center"
+                    Icon { name: modelData[0]; font.size: 13; color: modelData[2] ? teal : caption }
+                    Text { text: two(modelData[2]); align: "center"; font.family: fontNum; font.size: 17; font.tabular: true; color: modelData[2] ? ink : caption }
+                    Text { text: caps(modelData[1]); align: "center"; font.family: fontWide; font.width: "expanded"; font.size: 7.5; font.letterSpacing: 0.6; color: inkDim; maxLines: 1 } }
+            }
+        }
+    }
+}

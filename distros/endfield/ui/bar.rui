@@ -1,0 +1,1043 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    id: bar
+    side: "left"; width: 64; resizable: false
+    title: qsTr("The bar")
+    color: "transparent"
+    accent: signal
+    property int peekWidth: Math.max(160, Number(conf.values["tab-peek-width"]) || 520)
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property bool gameMarks: logoOpt === "game" && !!files.stat(brandDir + "tri.png")
+    property bool gameWord: gameMarks && !!files.stat(brandDir + "wordmark.png")
+    property string logoPicture: logoOpt !== "game" && logoOpt !== "emblem" ? logoOpt : ""
+    property bool ownEmblem: !gameMarks && !logoPicture
+    property var markInk: light ? "#141519" : accentName === "valley" ? valley : "#f0f0f2"
+    property var wordInk: light ? "#141519" : "#f0f0f2"
+
+    Process { id: sys; command: "endfield-sys" }
+    property var gameAt: null
+    function launchMark(phase) { if (gameAt) rex.paneData(gameAt.block, "launch", phase ? { at: gameAt.at, phase: phase } : null); }
+    property string gamePhase: ""
+    property bool gameIn: !!gameAt && (panes.list || []).some((p) => p.id === gameAt.block && ("app" in p ? !!p.app : gamePhase === "game"))
+    onGameInChanged: if (gameIn) { launchMark(null); gameAt = null; }
+    Process {
+        id: game; restart: false
+        command: gameAt ? ["endfield-game", gameAt.block, gameAt.session, conf.values["endfield-game-keys"] || "qwerty"] : []
+        onMessage: {
+            if (!message) return;
+            if (message.phase) { gamePhase = message.phase; launchMark(message.phase); }
+            if (message.status) launchMark("quitting");
+            if (message.error || message.status)
+                notices.post({ title: qsTr("Endfield"), body: qsTr(message.error || message.status), tone: message.error ? "warning" : "standard" });
+            if (message.error) launchMark(null);
+        }
+        onExited: if (gameAt) { launchMark(null); gameAt = null; }
+    }
+    property var staleLaunches: gameAt ? [] : (panes.list || []).filter((p) => !!(p.data && p.data.launch)).map((p) => p.id)
+    onStaleLaunchesChanged: (staleLaunches || []).forEach((id) => rex.paneData(id, "launch", null))
+    Shortcut {
+        key: "cmd+q"; keyTitle: qsTr("Stop Endfield's launch"); enabled: !!gameAt && panes.focused === gameAt.block
+        onActivated: { launchMark(null); gameAt = null; }
+    }
+    property var osuAt: null
+    Process {
+        id: osu; restart: false
+        command: osuAt ? ["/bin/sh", "-c", "nohup env -u DYLD_INSERT_LIBRARIES REX_BLOCK=\"$1\" REX_SESSION=\"$2\" \"$HOME/.local/bin/rexui\" embed '/Applications/osu! 2.app' >/dev/null 2>&1 &", "sh", osuAt.block, osuAt.session] : []
+        onExited: osuAt = null
+    }
+    Shortcut {
+        key: "cmd+alt+o"; keyTitle: qsTr("osu! in this pane")
+        onActivated: {
+            const b = rex.block();
+            if (b && !osuAt) osuAt = b;
+        }
+    }
+    Shortcut {
+        key: "cmd+alt+g"; keyTitle: qsTr("Endfield in this pane")
+        onActivated: {
+            const b = rex.block();
+            if (!b || gameAt) return;
+            gamePhase = "";
+            gameAt = { block: b.block, session: b.session, at: Date.now() };
+            launchMark("start");
+        }
+    }
+    Process { id: missions; command: terminal.open ? ["endfield-missions", conf.values["missions-folder"] || "~/Documents/Missions"] : "" }
+
+    property real busy: Math.max(0, Math.min(1, ((sys.state.cpu || 0) - 0.3) / 0.5))
+    property bool hasBattery: typeof sys.state.battery === "number" && sys.state.battery >= 0
+
+    property var now: new Date()
+    property var today: now.toDateString()
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+    function hhmm(d) { return two(d.getHours()) + ":" + two(d.getMinutes()); }
+    function pct(x) { return Math.round((x || 0) * 100) + "%"; }
+    property var sk: shared.values.skport || ({})
+    property bool skOk: sk.status === "ok"
+    property var role: skOk ? sk.role || ({}) : ({})
+    property var skSan: skOk ? sk.sanity || null : null
+    property int sanity: !skSan || !skSan.max ? 0 : !skSan.fullAt || now.getTime() >= skSan.fullAt ? Math.max(skSan.cur || 0, skSan.max)
+                       : !skSan.perPoint ? skSan.cur || 0 : Math.max(skSan.cur || 0, skSan.max - Math.ceil((skSan.fullAt - now.getTime()) / skSan.perPoint))
+    property bool sanFull: !!skSan && !!skSan.max && sanity >= skSan.max
+    property real minute: Math.floor(now.getTime() / 60000)
+    property string checkinJson: JSON.stringify(skOk && sk.checkin ? sk.checkin : null)
+    property var checkin: JSON.parse(checkinJson)
+    function frac(a, b) { return b ? Math.max(0, Math.min(1, (a || 0) / b)) : 0; }
+    function leftTill(t) {
+        const m = Math.max(0, Math.round((t - now.getTime()) / 60000));
+        return m >= 1440 ? qsTr("%1d %2h", Math.floor(m / 1440), Math.floor(m % 1440 / 60)) : m >= 60 ? qsTr("%1h %2m", Math.floor(m / 60), m % 60) : qsTr("%1m", m);
+    }
+    function rareTint(n) { return n >= 6 ? "#fc6c00" : n === 5 ? "#fcba00" : n === 4 ? "#904ef6" : "#24bafc"; }
+    property string sanStatsJson: JSON.stringify(!skSan || !skSan.max ? [] : sanFull ? [[qsTr("Sanity"), sanity + "/" + skSan.max, true], [qsTr("Recovery"), qsTr("Stopped"), true]]
+        : [[qsTr("Per point"), skSan.perPoint ? qsTr("%1m", Math.round(skSan.perPoint / 60000)) : "—", false],
+           [qsTr("Next"), skSan.perPoint ? qsTr("%1m", Math.max(1, Math.ceil(((skSan.fullAt - minute * 60000) % skSan.perPoint) / 60000))) : "—", false],
+           [qsTr("Full at"), hhmm(new Date(skSan.fullAt)), false]])
+    property var sanStats: JSON.parse(sanStatsJson)
+    property int termW: 760
+    property var rarityCounts: [6, 5, 4, 3].map((r) => [r, roster.length ? (sk.operators || []).filter((o) => o.rarity === r).length : 0]).filter((x) => x[1])
+    property var ciToday: checkin ? checkin.days.find((d) => d.today) || null : null
+    property string rosterJson: JSON.stringify(skOk ? (sk.operators || []).slice(0, 8) : [])
+    property var roster: JSON.parse(rosterJson)
+    function slashes(n, from, to) {
+        let d = "";
+        for (let i = from; i < to; i++) {
+            const x = i / n, w = 1 / n;
+            d += "M" + (x + 0.15 * w).toFixed(4) + " 1 L" + (x + 0.85 * w).toFixed(4) + " 0 ";
+        }
+        return d;
+    }
+    function openOperator(id) { shared.set("skportPick", { id: id, at: Date.now() }); rex.dock("account.rui", true); }
+    function skNote() {
+        return sk.status === "nologin" ? qsTr("Log in to SKPort") : sk.status === "unlinked" ? qsTr("No character")
+             : sk.status === "error" ? qsTr("SKPort didn't answer") : qsTr("Reading SKPort…");
+    }
+    function gb(bytes) { return ((bytes || 0) / 1e9).toFixed(bytes >= 1e11 ? 0 : 1); }
+    function uptime(s) {
+        s = Math.floor(s || 0);
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        return (d ? qsTr("%1d", d) + " " : "") + (d || h ? qsTr("%1h", h) + " " : "") + qsTr("%1m", m);
+    }
+    property string callsign: conf.values["endfield-callsign"] || sys.state.user || ""
+    function greeting() {
+        const h = now.getHours(), name = callsign;
+        const at = h < 5 ? 0 : h < 12 ? 1 : h < 18 ? 2 : h < 23 ? 3 : 4;
+        if (!name) return [qsTr("Still up?"), qsTr("Good morning."), qsTr("Good afternoon."), qsTr("Good evening."), qsTr("Good night.")][at];
+        return [qsTr("Still up, %1?", name), qsTr("Good morning, %1.", name), qsTr("Good afternoon, %1.", name),
+                qsTr("Good evening, %1.", name), qsTr("Good night, %1.", name)][at];
+    }
+    function dayOfYear() { const s = new Date(now.getFullYear(), 0, 1); return Math.floor((new Date(today) - s) / 86400000) + 1; }
+    function daysInYear() { const y = now.getFullYear(); return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 366 : 365; }
+    function week() {
+        const d = new Date(today);
+        d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+        const w1 = new Date(d.getFullYear(), 0, 4);
+        return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+    }
+    function dateLine() {
+        return now.getFullYear() + "." + two(now.getMonth() + 1) + "." + two(now.getDate()) + " · " +
+               caps(now.toLocaleDateString(i18n.locale, { weekday: "short" })) + " · W" + two(week());
+    }
+
+    function ticks(from, to) {
+        let d = "";
+        for (let i = from; i < to; i++) {
+            const a = i / 60 * 2 * Math.PI - Math.PI / 2, r1 = 0.5, r2 = i % 5 === 0 ? 0.455 : 0.475;
+            d += "M" + (0.5 + r1 * Math.cos(a)).toFixed(4) + " " + (0.5 + r1 * Math.sin(a)).toFixed(4) +
+                 " L" + (0.5 + r2 * Math.cos(a)).toFixed(4) + " " + (0.5 + r2 * Math.sin(a)).toFixed(4) + " ";
+        }
+        return d;
+    }
+    property string allTicks: ticks(0, 60)
+    property int goneTicks: Math.floor(frac(sanity, skSan ? skSan.max : 0) * 60)
+    property string doneTicks: ticks(0, goneTicks)
+
+    function keyWhat(e) {
+        if (e.kind === "group") return qsTr("Show or hide the %1 docks", e.title);
+        if (e.kind === "bar") return qsTr("Keep %1's bar up", e.title);
+        if (e.kind === "search") return qsTr("Search from %1's bar", e.title);
+        if (e.kind === "binding") { const t = e.title.replace(/^client\./, "").split(/[._]/).join(" "); return t.charAt(0).toUpperCase() + t.slice(1); }
+        return e.title;
+    }
+    property string keyQuery: ""
+    property var keyItems: (keys.list || []).map((e) => ({ key: e.key, what: keyWhat(e), group: e.group, from: e.from }))
+    property var keyGroups: {
+        const q = keyQuery.trim().toLowerCase(), order = { rexui: 0, "init.lua": 1, rex: 2 };
+        const groups = [], at = {};
+        for (const e of keyItems.slice().sort((a, b) => (order[a.from] - order[b.from]))) {
+            if (q && !(e.what.toLowerCase().includes(q) || e.key.includes(q) || e.group.toLowerCase().includes(q))) continue;
+            const name = e.group || e.from;
+            if (!(name in at)) { at[name] = groups.length; groups.push({ name: name, from: e.from, items: [] }); }
+            groups[at[name]].items.push(e);
+        }
+        return groups;
+    }
+    function fromColor(f) { return f === "rex" ? blue : f === "init.lua" ? lime : signal; }
+
+    function codeOf(name) { return caps(String(name || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 3)) || "—"; }
+    property int waiting: (activity.list || []).filter((e) => e.status === "blocked" && (!rex.sessionId || e.session === rex.sessionId)).length
+
+    property int page: 0
+    property var pageNames: [qsTr("Overview"), qsTr("Operation"), qsTr("Archive")]
+
+    property var wedgeHub: [
+        { t: qsTr("Terminal"), i: "square.grid.2x2", k: "cmd+shift+space", a: "terminal" },
+        { t: qsTr("Controls"), i: "keyboard", k: "cmd+shift+?", a: "controls" },
+        { t: qsTr("Command"), i: "command", k: "", a: "hub" },
+    ]
+    property var wedgeSquad: [
+        { t: qsTr("Squad"), i: "person.3.fill", k: "cmd+j", a: "squad" },
+        { t: qsTr("Missions"), i: "flag.fill", k: "cmd+shift+j", a: "missions" },
+        { t: qsTr("AIC"), i: "gearshape.2.fill", k: "cmd+shift+i", a: "aic" },
+    ]
+    property var wedgeSystem: [
+        { t: qsTr("Depot"), i: "shippingbox.fill", k: "cmd+shift+e", a: "depot" },
+        { t: qsTr("Wiki"), i: "book.pages.fill", k: "", a: "wiki" },
+        { t: qsTr("Settings"), i: "gearshape.fill", k: "cmd+,", a: "settings" },
+    ]
+    property var wheelSecs: [
+        { id: "terminal", title: qsTr("Terminal"), icon: "square.grid.2x2", items: wedgeHub, x: 94, y: 163 },
+        { id: "squad", title: qsTr("Squad"), icon: "person.3.fill", items: wedgeSquad, x: 282, y: 163 },
+        { id: "system", title: qsTr("System"), icon: "gearshape.fill", items: wedgeSystem, x: 188, y: 326 },
+    ]
+    property string wheelSec: ""
+    property string wheelSecTitle: ""
+    property bool wheelSub: false
+    property bool wheelFold: false
+    property bool wheelBacking: false
+    property bool wheelFlying: false
+    property int wheelStep: 0
+    property real wheelFlyX: 188
+    property real wheelFlyY: 218
+    function wheelPlace(i) {
+        const s = wheelSecs.find((x) => x.id === wheelSec);
+        return (s && s.items[i]) || { t: "", i: "", k: "", a: "" };
+    }
+    function wheelEnter(i) {
+        if (wheelSec || wheelFold) return;
+        const s = wheelSecs[i];
+        wheelFlying = false;
+        wheelFlyX = s.x; wheelFlyY = s.y;
+        wheelSecTitle = s.title;
+        wheelSec = s.id;
+        if (motion) { wheelFold = true; wheelStep = 1; }
+        else { wheelFlyX = 188; wheelFlyY = 218; wheelSub = true; }
+    }
+    function wheelBack() {
+        if (!wheelSec || wheelBacking) return;
+        if (motion) { wheelStep = 0; wheelSub = wheelSub && !wheelFold; wheelFold = true; wheelBacking = true; }
+        else wheelReset();
+    }
+    function wheelReset() {
+        wheelSec = ""; wheelSub = false; wheelFold = false; wheelBacking = false; wheelFlying = false; wheelStep = 0;
+    }
+    function wheelGo(a) {
+        wheel.open = false;
+        if (a === "terminal") terminal.open = true;
+        else if (a === "controls") controls.open = true;
+        else if (a === "hub") rex.run("client.palette.toggle");
+        else if (a === "settings") rex.run("client.settings");
+        else if (a === "depot") shared.set("summon", { what: "depot", at: Date.now() });
+        else rex.dock(a + ".rui");
+    }
+
+    property bool built: false
+    property real boot: 0.0005
+    property bool bootGone: false
+    property bool booting: conf.values["endfield-boot"] !== "false" && motion
+    Component.onCompleted: { built = true; shared.set("wheel", false); }
+    Timer { interval: 350; repeat: false; running: built && booting && !loading.active; onTriggered: boot = 1 }
+    Timer { interval: 1300; repeat: false; running: built && booting && !loading.active; onTriggered: bootGone = true }
+
+    Stack {
+        grow: 1
+        Row {
+            Rectangle { grow: 1; color: light ? surface : alpha(surface, 0.62) }
+            Rectangle { width: 1; color: light ? hairline : alpha(ink, 0.16) }
+        }
+        Row {
+            visible: booting
+            Item { grow: 1 }
+            Column {
+                width: 2
+                Rectangle { grow: boot; width: 2; color: signal; animate: 650; easing: "expo"; opacity: bootGone ? 0 : 1; opacityAnimation: 420 }
+                Item { grow: 1 - boot }
+            }
+        }
+
+        Column {
+            halign: "center"; verticalPadding: 14
+            Column {
+                halign: "center"
+                Column {
+                    halign: "center"; spacing: 12
+                    Stack {
+                        appear: motion ? "flicker" : ""; appearDelay: 160
+                        Brackets {
+                            arm: 7; weight: 1.5; tint: terminal.open ? signal : alpha(ink, 0.45)
+                            Rectangle {
+                                horizontalPadding: 6; verticalPadding: 4
+                                color: light ? (terminal.open ? paper : surface) : terminal.open ? alpha(signal, 0.12) : alpha(surface, 0.5); colorAnimation: 140
+                                border.width: light ? 1 : 0; border.color: terminal.open ? signal : hairline
+                                Column {
+                                    halign: "center"; spacing: 0
+                                    Text { text: two(now.getHours()); font.family: fontNum; font.size: 19; font.weight: "medium"; font.tabular: true; color: ink
+                                        scramble: motion ? 520 : 0; scrambleSet: "0123456789" }
+                                    Text { text: two(now.getMinutes()); font.family: fontNum; font.size: 19; font.weight: "light"; font.tabular: true; color: ink
+                                        scramble: motion ? 520 : 0; scrambleSet: "0123456789" }
+                                    Rectangle { width: 22; height: 1; color: hairline }
+                                    Text { text: two(now.getMonth() + 1) + "." + two(now.getDate()); font.family: fontMono; font.mono: true; font.size: 8; font.letterSpacing: 0.4; color: caption }
+                                }
+                            }
+                        }
+                        Button { stateRadius: 2; onClicked: terminal.open = !terminal.open }
+
+                        Drawer {
+                            id: terminal
+                            hover: true; key: "cmd+shift+space"; keyTitle: qsTr("The Terminal")
+                            rounding: 0; shape: cutLarge; color: surface; animation: 320
+
+                            Stack {
+                                Shader { source: "shaders/dots.metal"; running: false; params: [14, 0.8, 0, 0.75]; colors: [alpha(ink, light ? 0.16 : 0.12)] }
+                                Column {
+                                    width: termW + 48; padding: 24; spacing: 18
+
+                                    Row {
+                                        spacing: 20; valign: "top"
+                                        Heading {
+                                            grow: 1
+                                            code: qsTr("Terminal"); ghost: "TERMINAL"; title: greeting(); size: 28
+                                            sub: caps(qsTr("Operator %1", callsign || "—")) + "  ·  " + caps(qsTr("Day %1/%2", dayOfYear(), daysInYear())) + "  ·  W" + two(week()) + "  ·  " + caps(qsTr("Up %1", uptime(sys.state.uptime)))
+                                        }
+                                        Stack { width: gameWord ? 124 : 64; height: 64; appear: motion ? "flicker" : ""; appearDelay: 120
+                                            Shader { visible: gameWord; source: "shaders/mark.metal"; image: gameWord ? brandDir + "wordmark.png" : ""; colors: [wordInk]; running: false }
+                                            Shader { visible: ownEmblem; source: "shaders/emblem.metal"; colors: [signal, valley]; params: [busy, 1, 1, 1.2]; running: ownEmblem && motion && terminal.open; fps: 30 }
+                                            Shader { visible: gameMarks && !gameWord; source: "shaders/mark.metal"; image: gameMarks && !gameWord ? brandDir + "tri.png" : ""; colors: [markInk]; running: false }
+                                            Image { visible: !!logoPicture; source: logoPicture; fit: "contain" } }
+                                        Close { onClicked: terminal.open = false }
+                                    }
+
+                                    Column {
+                                        spacing: 0
+                                        Row {
+                                            Grid {
+                                                columns: 3; width: 3 * 132
+                                                model: pageNames
+                                                delegate: Stack {
+                                                    width: 132; height: 30
+                                                    property bool on: page === index
+                                                    Column { valign: "bottom"
+                                                        Rectangle { width: 110; height: 1; color: !on && headHit.hovered ? lineHot : "transparent"; colorAnimation: 140 } }
+                                                    Row {
+                                                        spacing: 7; horizontalPadding: 2
+                                                        Text { text: two(index + 1); font.family: fontMono; font.mono: true; font.size: 10; color: on ? primary : headHit.hovered ? inkDim : caption; colorAnimation: 140 }
+                                                        Text { text: caps(modelData); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 11; font.letterSpacing: 1.2; color: on ? ink : headHit.hovered ? inkDim : caption; colorAnimation: 140 }
+                                                    }
+                                                    Button { id: headHit; stateLayer: false; onClicked: page = index }
+                                                }
+                                            }
+                                            Item { grow: 1 }
+                                        }
+                                        Stack {
+                                            height: 3
+                                            Column { valign: "bottom"; Rectangle { height: 1; color: hairline } }
+                                            Row {
+                                                Item { width: page * 132 }
+                                                Rectangle { width: 110; height: 3; color: signal; animate: motion ? 280 : 0; easing: "expo" }
+                                            }
+                                        }
+                                    }
+
+                                    Pages {
+                                        current: page; spacing: 48; animation: 320
+
+                                        Column {
+                                            width: termW; spacing: 16
+                                            Row {
+                                                spacing: 16; valign: "stretch"
+                                                Column {
+                                                    width: termW; spacing: 16
+                                                    Row {
+                                                        valign: "stretch"
+                                                        appear: motion ? "wipe" : ""; appearDuration: 420
+                                                        Rectangle {
+                                                            grow: 1; color: "#1a1b1e"; shape: "square, cut 16, square, square"; border.width: 1; border.color: hairline
+                                                            Shader { source: "shaders/dots.metal"; running: false; params: [9, 0.8, 0, 0.9]; colors: [alpha(ink, 0.09)] }
+                                                            Column {
+                                                                padding: 14; spacing: 12
+                                                                SecHead { index: "01"; title: qsTr("Endministrator") }
+                                                                Row {
+                                                                    spacing: 16; valign: "top"
+                                                                    Stack {
+                                                                        width: 56; height: 56
+                                                                        Brackets { tint: alpha(ink, 0.45); arm: 12; weight: 2; inset: -7 }
+                                                                        Rectangle { color: well; border.width: 2; border.color: "#f0f0f2"
+                                                                            Column { padding: 2; Image { visible: !!role.avatar; source: role.avatar || ""; height: 52; fit: "cover" } } }
+                                                                        Row { Item { grow: 1 }
+                                                                            Column { padding: -5
+                                                                                Path { width: 14; height: 14; d: "M0.5 0 L1 0.5 L0.5 1 L0 0.5 Z"; fill: orange; stroke: "#f0f0f2"; strokeWidth: 1.5 } } }
+                                                                    }
+                                                                    Column {
+                                                                        grow: 1; spacing: 8
+                                                                        Text { text: skOk ? role.name : (sk.account && sk.account.name) || qsTr("Endministrator"); font.family: fontUi; font.size: 16; font.weight: "medium"; color: ink; maxLines: 1 }
+                                                                        Row { visible: !!role.uid; spacing: 6; valign: "center"
+                                                                            Text { text: role.uid || ""; font.family: fontNum; font.size: 15; font.tabular: true; color: inkDim }
+                                                                            Icon { name: "doc.on.doc"; font.size: 11; color: caption } }
+                                                                    }
+                                                                }
+                                                                Row { visible: skOk && !!role.created; spacing: 0; valign: "stretch"
+                                                                    Rectangle { color: "#0a0a0b"; horizontalPadding: 7; verticalPadding: 3
+                                                                        Row { spacing: 5; valign: "center"
+                                                                            Text { text: "▶▶"; font.size: 9; color: signal }
+                                                                            Text { text: qsTr("Awakening Day"); font.family: fontUi; font.size: 12; color: ink } } }
+                                                                    Rectangle { color: "#f0f0f2"; horizontalPadding: 8; verticalPadding: 3
+                                                                        Text { text: role.created ? new Date(role.created).getFullYear() + "-" + two(new Date(role.created).getMonth() + 1) + "-" + two(new Date(role.created).getDate()) : ""; font.family: fontNum; font.size: 13; font.tabular: true; color: "#141519" } } }
+                                                                Grid {
+                                                                    columns: 1; spacing: 4
+                                                                    model: [[qsTr("Authority Level"), "checkmark.seal.fill", skOk ? role.level : "--"], [qsTr("Exploration Level"), "eye.circle.fill", skOk ? role.worldLevel : "--"]]
+                                                                    delegate: Row { spacing: 10; valign: "center"
+                                                                        Rectangle { width: 10; height: 5; color: signal }
+                                                                        Icon { name: modelData[1]; font.size: 13; color: ink }
+                                                                        Text { grow: 1; text: modelData[0]; font.family: fontUi; font.size: 13.5; color: ink }
+                                                                        Text { text: String(modelData[2]); font.family: fontNum; font.size: 18; font.tabular: true; color: ink } }
+                                                                }
+                                                                Stack {
+                                                                    visible: !!role.mission
+                                                                    Rectangle { color: "#0a0a0b"; border.width: 1; border.color: hairline }
+                                                                    Shader { source: "shaders/contour.metal"; running: motion && terminal.open && page === 0; fps: 24; params: [10, 120, 0.015, 0.6, 0, 0.2]; colors: [alpha(ink, 0.1), alpha(signal, 0.35)] }
+                                                                    Column { padding: 12; spacing: 4
+                                                                        Row { Rectangle { color: "#f0f0f2"; horizontalPadding: 5; verticalPadding: 1
+                                                                            Text { text: "[" + caps(qsTr("Main mission")) + "]"; font.family: fontMono; font.mono: true; font.size: 7.5; color: "#141519" } } }
+                                                                        Text { text: role.mission || ""; font.family: fontUi; font.size: 17; font.weight: "medium"; color: ink; maxLines: 1 } }
+                                                                }
+                                                            }
+                                                        }
+                                                        Rectangle {
+                                                            width: 300; color: paper
+                                                            Column {
+                                                                padding: 14; spacing: 12
+                                                                Grid {
+                                                                    columns: 1; spacing: 6
+                                                                    model: [[qsTr("Operators"), role.operators], [qsTr("Weapons"), role.weapons], [qsTr("Files"), role.documents]]
+                                                                    delegate: Stack {
+                                                                        Rectangle { color: "#d6d6d4" }
+                                                                        Row { verticalPadding: 8; horizontalPadding: 12; spacing: 10; valign: "bottom"
+                                                                            Text { width: 52; text: skOk ? String(modelData[1] || 0) : "--"; font.family: fontNum; font.size: 32; font.tabular: true; color: "#141519" }
+                                                                            Row { spacing: 6; valign: "center"; verticalPadding: 6
+                                                                                Rectangle { width: 3; height: 3; color: "#141519" }
+                                                                                Text { text: modelData[0]; font.family: fontUi; font.size: 15; color: "#141519"; maxLines: 1 } } }
+                                                                    }
+                                                                }
+                                                                Item { grow: 1 }
+                                                                Column {
+                                                                    spacing: 6
+                                                                    Row {
+                                                                        Text { text: caps(qsTr("Pass")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 1.2; color: onPaper }
+                                                                        Item { grow: 1 }
+                                                                        Text { text: (skOk ? caps(qsTr("Achieved")) + " | " + two(sk.achievements || 0) + "    " : "") + (skOk && sk.pass ? "LV | " + two(sk.pass.cur) + " / " + sk.pass.max : "--"); font.family: fontMono; font.mono: true; font.size: 10.5; font.tabular: true; color: onPaper } }
+                                                                    Stack {
+                                                                        height: 9
+                                                                        Path { d: slashes(36, 0, 36); stroke: alpha(onPaper, 0.18); strokeWidth: 1.6 }
+                                                                        Path { d: slashes(36, 0, Math.round(frac(sk.pass && sk.pass.cur, skOk && sk.pass ? sk.pass.max : 0) * 36)); stroke: onPaper; strokeWidth: 1.6
+                                                                            start: 0; end: terminal.open ? 1 : 0; animate: 700 }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        color: container; border.width: 1; border.color: hairline; padding: 14; shape: cut
+                                                        appear: motion ? "wipe" : ""; appearDelay: 70; appearDuration: 420
+                                                        Column {
+                                                            spacing: 14
+                                                            SecHead { index: "02"; title: qsTr("Check-in"); meta: checkin ? two(checkin.done) + " / " + two(checkin.days.length) : "" }
+                                                            Loader {
+                                                                delegate: Grid {
+                                                                    visible: !!checkin; columns: 7; spacing: 3
+                                                                    model: checkin ? checkin.days : []
+                                                                    delegate: Stack {
+                                                                        height: 42
+                                                                        appear: motion ? "flicker" : ""; appearDelay: 120 + index * 12
+                                                                        tip: modelData.name ? modelData.name.split("|")[0] + (modelData.count > 1 ? " ×" + modelData.count : "") : ""
+                                                                        Rectangle { shape: cutPlate; color: modelData.done ? signal : modelData.today ? alpha(signal, 0.08) : containerHigh
+                                                                            border.width: modelData.today ? 1 : 0; border.color: signal }
+                                                                        Column { halign: "center"; valign: "center"; spacing: 1
+                                                                            Image { visible: !!modelData.icon; source: modelData.icon; width: 22; height: 22; fit: "contain"; opacity: modelData.done ? 0.5 : 1 }
+                                                                            Text { text: two(modelData.day); align: "center"; font.family: fontNum; font.size: 9.5; font.tabular: true; color: modelData.done ? onSignal : modelData.today ? primary : inkDim } }
+                                                                    }
+                                                                }
+                                                            }
+                                                            Stack {
+                                                                visible: !!ciToday
+                                                                Rectangle { shape: cutButton; color: well; border.width: 1; border.color: hairline }
+                                                                Row {
+                                                                    spacing: 0; valign: "stretch"
+                                                                    Rectangle { width: 3; color: checkin && checkin.today ? green : orange }
+                                                                    Row { grow: 1; padding: 7; horizontalPadding: 9; spacing: 9; valign: "center"
+                                                                        Image { source: ciToday ? ciToday.icon : ""; width: 24; height: 24; fit: "contain" }
+                                                                        Column { grow: 1; spacing: 2
+                                                                            Text { text: caps(checkin && checkin.today ? qsTr("Claimed today") : qsTr("Today's reward")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8; font.letterSpacing: 1; color: checkin && checkin.today ? green : orange; maxLines: 1 }
+                                                                            Text { text: ciToday ? ciToday.name.split("|")[0] : ""; font.family: fontUi; font.size: 12.5; font.weight: "medium"; color: ink; wrap: true; maxLines: 2 } }
+                                                                        Text { text: ciToday ? "×" + ciToday.count : ""; font.family: fontNum; font.size: 16; font.tabular: true; color: ink } }
+                                                                }
+                                                            }
+                                                            Text { visible: !checkin; text: skNote(); font.family: fontUi; font.size: 13; color: inkDim }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Rectangle {
+                                                color: container; border.width: 1; border.color: hairline; padding: 14; shape: cutLarge
+                                                appear: motion ? "wipe" : ""; appearDelay: 140; appearDuration: 420
+                                                Column {
+                                                    spacing: 14
+                                                    SecHead { index: "03"; title: qsTr("Operators"); meta: skOk ? two(roster.length) + " / " + two((sk.operators || []).length) : ""
+                                                        Grid { columns: Math.max(1, rarityCounts.length); width: rarityCounts.length * 46; model: rarityCounts
+                                                            delegate: Row { spacing: 4; valign: "center"; horizontalPadding: 4
+                                                                Stars { count: 1; size: 13; tint: rareTint(modelData[0]) }
+                                                                Text { text: "×" + modelData[1]; font.family: fontNum; font.size: 11; font.tabular: true; color: inkDim } } }
+                                                        Item { width: 8 }
+                                                        Btn { text: qsTr("Roster") + "  >>>"; small: true; onClicked: { terminal.open = false; rex.dock("account.rui", true); } } }
+                                                    Loader {
+                                                        delegate: Grid {
+                                                            visible: roster.length > 0; columns: 8; spacing: 6
+                                                            model: roster
+                                                            delegate: OperatorCard { op: modelData; appear: motion ? "flicker" : ""; appearDelay: 220 + index * 45
+                                                                onClicked: openOperator(modelData.id) }
+                                                        }
+                                                    }
+                                                    Text { visible: roster.length === 0; text: skNote(); font.family: fontUi; font.size: 13; color: inkDim }
+                                                }
+                                            }
+                                            AicMonitor { compact: true; state: sys.state; running: terminal.open && page === 0 }
+                                        }
+
+                                        Row {
+                                            width: termW; spacing: 28; valign: "top"
+                                            Stack {
+                                                width: 232; height: 232
+                                                Arc { value: frac(sanity, skSan ? skSan.max : 0); start: -90; sweep: 360; thickness: 3; gap: 0; dot: false
+                                                    color: sanFull ? orange : signal; track: containerHigh }
+                                                Path { d: allTicks; stroke: caption; strokeWidth: 1 }
+                                                Path { d: doneTicks; stroke: sanFull ? orange : primary; strokeWidth: 1.5 }
+                                                Column {
+                                                    halign: "center"; valign: "center"; spacing: 4
+                                                    Text { text: "// " + caps(qsTr("Sanity")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: sanFull ? orange : primary }
+                                                    Text { text: skSan ? String(sanity) : "--"; font.family: fontNum; font.weight: "light"; font.size: 52; font.tabular: true; color: ink }
+                                                    Text { text: "/" + (skSan ? skSan.max : "--"); font.family: fontNum; font.size: 13; font.tabular: true; color: caption }
+                                                }
+                                            }
+                                            Column {
+                                                grow: 1; spacing: 14
+                                                Heading { code: qsTr("Operation"); band: false; size: 22
+                                                    title: !skSan ? skNote() : sanFull ? qsTr("Sanity is full.") : qsTr("Full in %1", leftTill(skSan.fullAt))
+                                                    sub: !skOk ? caps(qsTr("SKPort")) : caps(qsTr("Authority %1", role.level)) + (skSan && skSan.fullAt && !sanFull ? "  ·  " + caps(qsTr("Full at %1", hhmm(new Date(skSan.fullAt)))) : "") }
+                                                Grid {
+                                                    visible: sanStats.length > 0; columns: Math.max(1, sanStats.length); spacing: 6
+                                                    model: sanStats
+                                                    delegate: Stack {
+                                                        Rectangle { shape: cutPlate; color: containerHigh }
+                                                        Row { padding: 10; spacing: 7; valign: "center"
+                                                            Diamond { on: true; tint: modelData[2] ? orange : primary; size: 7 }
+                                                            Text { grow: 1; text: caps(modelData[0]); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1; color: inkDim; maxLines: 1 }
+                                                            Text { text: "| " + modelData[1]; font.family: fontNum; font.size: 14; font.tabular: true; color: ink } }
+                                                    }
+                                                }
+                                                Gauge { label: qsTr("Daily activity"); value: skOk && sk.daily ? frac(sk.daily.cur, sk.daily.max) : 0
+                                                    text: skOk && sk.daily ? sk.daily.cur + "/" + sk.daily.max : "--"; segments: 10; thickness: 4; tint: skOk && sk.daily && sk.daily.cur >= sk.daily.max ? green : signal }
+                                                Gauge { label: qsTr("Pass"); value: skOk && sk.pass ? frac(sk.pass.cur, sk.pass.max) : 0
+                                                    text: skOk && sk.pass ? qsTr("LV %1/%2", sk.pass.cur, sk.pass.max) : "--"; thickness: 3; tint: blue }
+                                                Rectangle { height: 1; color: hairline }
+                                                MissionList { compact: true; limit: 5; state: missions.state; act: (m) => missions.send(m) }
+                                            }
+                                        }
+
+                                        Column {
+                                            width: termW; spacing: 18
+                                            Row {
+                                                spacing: 24; valign: "top"
+                                                Column {
+                                                    width: 340; spacing: 10
+                                                    Text { text: "// " + caps(qsTr("Palette")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                                                    Grid {
+                                                        columns: 5; spacing: 8
+                                                        model: [
+                                                            { name: qsTr("Signal"), hex: "#fffa00" }, { name: qsTr("Ink"), hex: "#f0f0f2" }, { name: qsTr("Paper"), hex: "#ebebeb" },
+                                                            { name: qsTr("Field"), hex: "#0f0f10" }, { name: qsTr("Steel"), hex: "#33363c" },
+                                                            { name: qsTr("Needs you"), hex: "#ff7a1a" }, { name: qsTr("Danger"), hex: "#d91e36" }, { name: qsTr("Done"), hex: "#7be04b" },
+                                                            { name: qsTr("Working"), hex: "#bce41d" }, { name: qsTr("Data"), hex: "#4fa8ff" },
+                                                        ]
+                                                        delegate: Column {
+                                                            spacing: 3
+                                                            Rectangle { height: 34; color: modelData.hex; border.width: 1; border.color: hairline; shape: "square, cut 6, square, square" }
+                                                            Text { text: modelData.name; font.family: fontUi; font.size: 11; color: ink; maxLines: 1 }
+                                                            Text { text: modelData.hex.slice(1).toUpperCase(); font.family: fontMono; font.mono: true; font.size: 8.5; color: caption }
+                                                        }
+                                                    }
+                                                    Row { spacing: 10
+                                                        Band { }
+                                                        Text { text: qsTr("The tri-band: once per panel, at its top left."); font.family: fontUi; font.size: 11; color: inkDim } }
+                                                }
+                                                Column {
+                                                    grow: 1; spacing: 10
+                                                    Text { text: "// " + caps(qsTr("Type")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                                                    Row { spacing: 14
+                                                        Text { width: 76; text: "Aa"; font.family: fontUi; font.size: 34; font.weight: "medium"; color: ink }
+                                                        Column { spacing: 2; Text { text: "HarmonyOS Sans"; font.family: fontUi; font.size: 13; color: ink }; Text { text: qsTr("The interface, and what's read"); font.family: fontUi; font.size: 11; color: caption } } }
+                                                    Row { spacing: 14
+                                                        Text { width: 76; text: "AA"; font.family: fontWide; font.width: "expanded"; font.size: 26; font.weight: "bold"; color: ink }
+                                                        Column { spacing: 2; Text { text: "Saira Expanded"; font.family: fontUi; font.size: 13; color: ink }; Text { text: qsTr("Labels in capitals"); font.family: fontUi; font.size: 11; color: caption } } }
+                                                    Row { spacing: 14
+                                                        Text { width: 76; text: "307"; font.family: fontNum; font.size: 30; font.weight: "light"; font.tabular: true; color: ink }
+                                                        Column { spacing: 2; Text { text: "Space Grotesk"; font.family: fontUi; font.size: 13; color: ink }; Text { text: qsTr("Numerals and counters"); font.family: fontUi; font.size: 11; color: caption } } }
+                                                    Row { spacing: 14
+                                                        Text { width: 76; text: "//0x"; font.family: fontMono; font.mono: true; font.size: 22; color: ink }
+                                                        Column { spacing: 2; Text { text: "Iosevka"; font.family: fontUi; font.size: 13; color: ink }; Text { text: qsTr("Data, micro lines, keycaps"); font.family: fontUi; font.size: 11; color: caption } } }
+                                                }
+                                            }
+                                            Column {
+                                                spacing: 10
+                                                Text { text: "// " + caps(qsTr("Shaders")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                                                Grid {
+                                                    columns: 9; spacing: 8
+                                                    model: [
+                                                        { n: "emblem", t: qsTr("Emblem"), p: [0, 1, 1, 1], c: [signal, valley] }, { n: "hatch", t: qsTr("Hatch"), p: [45, 8, 0.33, 0, 0, 0], c: [alpha(signal, 0.7)] },
+                                                        { n: "dots", t: qsTr("Dots"), p: [8, 0.9, 0, 0], c: [alpha(ink, 0.4)] }, { n: "contour", t: qsTr("Contour"), p: [12, 60, 0.01, 0.7, 0, 0], c: [alpha(ink, 0.45), signal] },
+                                                        { n: "grid", t: qsTr("Blueprint"), p: [8, 4, 3, 0], c: [alpha(ink, 0.1), alpha(ink, 0.25), signal, signal] },
+                                                        { n: "belt", t: qsTr("Belt"), p: [0.3, 0.8, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 30, 0], c: [signal, alpha(signal, 0.3), containerHighest, signal] },
+                                                        { n: "curtain", t: qsTr("Curtain"), p: [3, 0, 0.35], c: [signal] }, { n: "ribbon", t: qsTr("Ribbon"), p: [2, -20, 0], c: [lime, alpha(ink, 0.4), "#00000000"] },
+                                                        { n: "foil", t: qsTr("Medal"), p: [0, 6, 0.6], c: ["#b8b8b8", orange] },
+                                                    ]
+                                                    delegate: Column {
+                                                        spacing: 4
+                                                        Rectangle { height: 64; color: container; border.width: 1; border.color: hairline
+                                                            Shader { source: "shaders/" + modelData.n + ".metal"; running: false; params: modelData.p; colors: modelData.c } }
+                                                        Text { text: modelData.t; font.family: fontUi; font.size: 11; color: ink; maxLines: 1 }
+                                                    }
+                                                }
+                                            }
+                                            Text {
+                                                width: termW; wrap: true
+                                                text: qsTr("endfield: the terminal in Endfield's interface. Sharp panels cut at two corners, one signal yellow for what's live, paper for what matters, micro lines that always say something true. Things flicker on and settle; nothing bounces. Drawn by its own layers and shaders: no artwork of the game's.")
+                                                font.family: fontUi; font.size: 12; color: inkDim
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Column {
+                        spacing: 0
+                        Grid {
+                            width: 44; columns: 1
+                            model: rex.sessions
+                            delegate: Stack {
+                                width: 44; height: 26
+                                property bool here: modelData.id === rex.sessionId
+                                Rectangle {
+                                    width: 40; height: 20; halign: "center"; valign: "center"
+                                    shape: "square, square, square, cut 6"
+                                    color: here ? alpha(signal, 0.1) : sessionHit.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                    border.width: 1; border.color: here ? signal : sessionHit.hovered ? caption : hairline
+                                    appear: motion ? "flicker" : ""; appearDelay: 80 + index * 38
+                                    Text { text: codeOf(modelData.label || modelData.id); font.family: fontWide; font.width: "expanded"; font.weight: "bold"; font.size: 7.5
+                                        font.letterSpacing: 0.8; color: here ? primary : sessionHit.hovered ? ink : inkDim; colorAnimation: 140 }
+                                }
+                                Button { id: sessionHit; stateLayer: false; tip: modelData.label || modelData.id
+                                    onClicked: if (!here) rex.run("session.select", { session_id: modelData.id }) }
+                            }
+                        }
+                        Stack {
+                            width: 44; height: 22
+                            Rectangle {
+                                width: 40; height: 16; halign: "center"; valign: "center"
+                                shape: "square, square, square, cut 6"; color: sessionMenu.open ? alpha(signal, 0.1) : "transparent"; colorAnimation: 140
+                                border.width: 1; border.dash: [2, 2]; border.color: sessionMenu.open ? signal : sessionsMore.hovered ? caption : hairline
+                                Text { text: "+"; font.family: fontNum; font.size: 11; color: sessionMenu.open ? primary : caption; colorAnimation: 140 }
+                            }
+                            Button { id: sessionsMore; stateLayer: false; tip: qsTr("Sessions"); onClicked: sessionMenu.open = !sessionMenu.open }
+                            Drawer {
+                                id: sessionMenu
+                                hover: true; rounding: 0; shape: cut
+                                onOpenChanged: if (open) peek.at = 0
+                                color: surface; padding: 12; animation: 320
+                                Column {
+                                    width: 260; spacing: 2
+                                    Row {
+                                        horizontalPadding: 8; verticalPadding: 4; spacing: 6
+                                        Text { text: "▼"; font.size: 7; color: primary }
+                                        Text { text: "// " + caps(qsTr("Sessions")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                                        Item { grow: 1 }
+                                        Text { text: two(rex.sessions.length || 1); font.family: fontNum; font.size: 11; font.tabular: true; color: caption }
+                                    }
+                                    List {
+                                        spacing: 1; maxHeight: 340
+                                        model: rex.sessions
+                                        delegate: Stack {
+                                            property bool hot: rowButton.hovered || endButton.hovered
+                                            property bool here: modelData.id === rex.sessionId
+                                            Rectangle { color: hot ? containerHigh : here ? container : "transparent"; colorAnimation: 120 }
+                                            Row {
+                                                Rectangle { width: 3; height: 32; color: here ? signal : hot ? alpha(signal, 0.5) : "transparent"; colorAnimation: 120 }
+                                                Row {
+                                                    horizontalPadding: 10; height: 32; spacing: 10
+                                                    Text { text: two(index + 1); font.family: fontNum; font.size: 11; font.tabular: true; color: here ? primary : caption }
+                                                    Text { text: modelData.label || modelData.id; font.family: fontUi; font.size: 13; color: here ? ink : inkDim; colorAnimation: 120
+                                                        scramble: motion ? 360 : 0 }
+                                                    Item { grow: 1 }
+                                                }
+                                            }
+                                            Button { id: rowButton; stateLayer: false
+                                                onClicked: { sessionMenu.open = false; if (!here) rex.run("session.select", { session_id: modelData.id }); } }
+                                            Row {
+                                                halign: "right"; horizontalPadding: 8
+                                                Button { id: endButton; icon: "xmark"; font.size: 9; font.bold: true; enabled: hot; tip: qsTr("End this session")
+                                                    color: hovered ? red : caption; colorAnimation: 120; opacity: hot ? 1 : 0; animate: 140; easing: "expo"
+                                                    onClicked: rex.closeSession(modelData.id) }
+                                            }
+                                        }
+                                    }
+                                    Rectangle { height: 1; color: hairline }
+                                    Stack {
+                                        Row { spacing: 10; horizontalPadding: 13; height: 32
+                                            Text { text: "+"; font.family: fontNum; font.size: 14; color: primary }
+                                            Text { text: qsTr("New Session"); font.family: fontUi; font.size: 13; color: ink }
+                                            Item { grow: 1 } }
+                                        Button { stateRadius: 2; onClicked: { sessionMenu.open = false; rex.run("session.new"); } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle { width: 30; height: 1; color: hairline }
+                    Stack {
+                        width: 44; height: Math.max(1, rex.tabs) * 30; animate: 240; easing: "expo"
+                        Grid {
+                            columns: 1
+                            model: rex.tabs
+                            delegate: Stack {
+                                width: 44; height: 30
+                                property bool cur: index === rex.tab - 1
+                                Rectangle {
+                                    width: 40; height: 24; halign: "center"; valign: "center"
+                                    shape: "square, cut 6, square, square"
+                                    color: cur ? "transparent" : slotHit.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                    border.width: cur ? 0 : 1; border.color: slotHit.hovered ? caption : hairline
+                                    appear: motion ? "flicker" : ""; appearDelay: 120 + index * 38
+                                    Text { text: two(index + 1); font.family: fontNum; font.size: 11; font.weight: "medium"; font.tabular: true; color: inkDim }
+                                }
+                                Button {
+                                    id: slotHit; stateLayer: false
+                                    onHoveredChanged: {
+                                        if (hovered) { sessionMenu.open = false; peek.at = index + 1; }
+                                        else if (peek.at === index + 1) peek.at = 0;
+                                    }
+                                    onClicked: {
+                                        peek.open = false;
+                                        peek.seen = 0;
+                                        if (index !== rex.tab - 1) rex.run("client.tab.goto", { index: index + 1 });
+                                    }
+                                }
+                            }
+                        }
+                        Column {
+                            Item { height: Math.max(0, rex.tab - 1) * 30 + 3 }
+                            Row { halign: "center"; animate: motion ? 300 : 0; easing: "expo"
+                                Rectangle {
+                                    width: 40; height: 24; shape: "square, cut 6, square, square"; color: signal; halign: "center"; valign: "center"
+                                    Text { text: two(Math.max(1, rex.tab)); font.family: fontNum; font.size: 11; font.weight: "medium"; font.tabular: true; color: onSignal
+                                        scramble: motion ? 300 : 0; scrambleSet: "0123456789" }
+                                } }
+                        }
+                        Drawer {
+                            id: peek
+                            property int at: 0
+                            property int seen: 0
+                            property bool want: !sessionMenu.open && ((at > 0 && at !== rex.tab && at <= rex.tabs) || (open && peekOver.hovered && seen > 0 && seen !== rex.tab))
+                            onAtChanged: if (at > 0 && at !== rex.tab && at <= rex.tabs) seen = at
+                            property int tabNow: rex.tab
+                            onTabNowChanged: { at = 0; peekOff.running = false; open = false; }
+                            onWantChanged: {
+                                peekOff.running = false;
+                                if (want) open = true;
+                                else peekOff.running = true;
+                            }
+                            shift: seen > 0 ? (seen - 0.5 - rex.tabs / 2) * 30 : 0
+                            animation: 300; rounding: 0; shape: cut
+                            color: surface; padding: 12; spacing: 8
+                            Stack {
+                                Button {
+                                    id: peekOver; stateLayer: false; focusable: false
+                                    onClicked: {
+                                        const t = peek.seen;
+                                        peek.open = false;
+                                        peek.seen = 0;
+                                        if (t > 0 && t !== rex.tab) rex.run("client.tab.goto", { index: t });
+                                    }
+                                }
+                                Column {
+                                    spacing: 8
+                                    Row {
+                                        width: peekWidth; spacing: 6
+                                        Text { text: "▼"; font.size: 7; color: primary }
+                                        Text { text: "// " + caps(qsTr("Tab %1", two(peek.seen || 1))); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                                        Text { grow: 1; text: rex.titles[peek.seen - 1] || ""; font.family: fontUi; font.size: 12; color: inkDim; maxLines: 1 }
+                                        Rectangle { width: 6; height: 6; radius: 3; color: green }
+                                        Text { text: caps(qsTr("Live")); font.family: fontMono; font.mono: true; font.size: 8.5; color: green }
+                                    }
+                                    Brackets { width: peekWidth; tint: signal; arm: 12; inset: -4; flicker: true
+                                        TabPreview { width: peekWidth; tab: peek.seen; radius: 0 } }
+                                }
+                            }
+                        }
+                        Timer { id: peekOff; interval: 160; repeat: false; running: false; onTriggered: { running = false; if (!peek.want) peek.open = false; } }
+                    }
+                    Stack {
+                        visible: waiting > 0
+                        Row { spacing: 4
+                            Text { text: "◆"; font.size: 11; color: orange }
+                            Text { text: String(waiting); font.family: fontNum; font.size: 11; font.tabular: true; color: orange } }
+                        Button { stateRadius: 3; tip: qsTr("Waiting for you"); onClicked: rex.run("client.sidebar.activity.toggle") }
+                    }
+                }
+            }
+        }
+
+        Column {
+            halign: "center"; verticalPadding: 12
+            Item { grow: 1 }
+            Stack {
+                width: 22; height: 22
+                appear: motion ? "flicker" : ""
+                Button { stateLayer: false; focusRing: false; tip: qsTr("Command palette"); onClicked: rex.run("client.palette.toggle") }
+                Shader { visible: ownEmblem; source: "shaders/emblem.metal"; colors: [signal, valley]; params: [busy, 1, 1, 1.4]; running: ownEmblem && motion; fps: 30 }
+                Shader { visible: gameMarks; source: "shaders/mark.metal"; image: gameMarks ? brandDir + "tri.png" : ""; colors: [markInk]; running: false }
+                Image { visible: !!logoPicture; source: logoPicture; fit: "contain" }
+            }
+        }
+
+        Item {
+            width: 1; height: 1
+            Drawer {
+                id: wheel
+                placement: "center"; width: 376; height: 435; resizable: false; movable: false
+                key: "cmd+e"; keyTitle: qsTr("The wheel")
+                exclusive: "rex-panels"
+                rounding: 0; color: "transparent"; animation: 240
+                onOpenChanged: { shared.set("wheel", open); if (!open) wheelReset(); }
+                Stack {
+                    width: 376; height: 435
+                    Button { stateLayer: false; focusable: false; onClicked: wheel.open = false }
+                    Column {
+                        spacing: 0
+                        Item { height: 109 }
+                        Row {
+                            spacing: 0
+                            WheelWedge { dir: "tl"; on: wheel.open && !wheelFold; order: 0
+                                title: wheelSub ? wheelPlace(0).t : wheelSecs[0].title; icon: wheelSub ? wheelPlace(0).i : wheelSecs[0].icon; keys: wheelSub ? wheelPlace(0).k : ""
+                                pick: () => wheelSub ? wheelGo(wheelPlace(0).a) : wheelEnter(0) }
+                            WheelWedge { dir: "tr"; on: wheel.open && !wheelFold; order: 1
+                                title: wheelSub ? wheelPlace(1).t : wheelSecs[1].title; icon: wheelSub ? wheelPlace(1).i : wheelSecs[1].icon; keys: wheelSub ? wheelPlace(1).k : ""
+                                pick: () => wheelSub ? wheelGo(wheelPlace(1).a) : wheelEnter(1) }
+                        }
+                        Row {
+                            spacing: 0
+                            Item { width: 94 }
+                            WheelWedge { dir: "b"; on: wheel.open && !wheelFold; order: 2
+                                title: wheelSub ? wheelPlace(2).t : wheelSecs[2].title; icon: wheelSub ? wheelPlace(2).i : wheelSecs[2].icon; keys: wheelSub ? wheelPlace(2).k : ""
+                                pick: () => wheelSub ? wheelGo(wheelPlace(2).a) : wheelEnter(2) }
+                        }
+                    }
+                    Column {
+                        Item { height: 109 }
+                        Row {
+                            Item { width: 94 }
+                            Button { id: hubHit; width: 188; height: 163; shape: "svg M0.5 0 L1 1 L0 1 Z"; stateLayer: false
+                                tip: wheelSec ? qsTr("Back") : qsTr("Command palette"); onClicked: wheelSec ? wheelBack() : wheelGo("hub") }
+                        }
+                    }
+                    Column {
+                        Item { height: 218 - 12 }
+                        Row {
+                            halign: "center"
+                            Stack {
+                                width: 104; height: 24
+                                Column {
+                                    halign: "center"; opacity: wheelSec ? 0 : 1; animate: motion ? 220 : 0
+                                    appear: motion ? "flicker" : ""; appearDelay: 200; appearDuration: 380
+                                    Text { text: hhmm(now); align: "center"; font.family: fontNum; font.size: 18; font.weight: "medium"; font.tabular: true; color: hubHit.hovered ? primary : ink; colorAnimation: 120
+                                        scramble: motion && wheel.open ? 520 : 0 }
+                                }
+                            }
+                        }
+                    }
+                    Column {
+                        opacity: wheelSec && !wheelBacking ? 1 : 0; animate: motion ? 200 : 0
+                        Item { height: wheelFlyY - 8 }
+                        Row {
+                            animate: wheelFlying && motion ? 360 : 0; easing: "expo"
+                            Item { width: wheelFlyX - 80 }
+                            Text { width: 160; align: "center"; text: caps(wheelSecTitle); font.family: fontWide; font.width: "expanded"; font.weight: "bold"
+                                animate: wheelFlying && motion ? 360 : 0; easing: "expo"
+                                font.size: 11; font.letterSpacing: 1.5; color: hubHit.hovered ? ink : primary; colorAnimation: 120
+                                glow: alpha(signal, hubHit.hovered ? 0.6 : 0.35); glowRadius: 8; scramble: motion ? 360 : 0 }
+                        }
+                    }
+                }
+            }
+        }
+        Timer { interval: 16; repeat: false; running: wheelStep === 1; onTriggered: { wheelFlying = true; wheelStep = 2; } }
+        Timer { interval: 16; repeat: false; running: wheelStep === 2; onTriggered: { wheelFlyX = 188; wheelFlyY = 218; wheelStep = 3; } }
+        Timer { interval: 300; repeat: false; running: wheelStep === 3; onTriggered: { wheelStep = 0; if (wheelSec) { wheelSub = true; wheelFold = false; } } }
+        Timer { interval: 300; repeat: false; running: wheelBacking; onTriggered: { wheelSec = ""; wheelSub = false; wheelFold = false; wheelBacking = false; wheelFlying = false; } }
+
+        Item {
+            width: 1; height: 1
+            Drawer {
+                id: controls
+                placement: "center"; width: 880; height: 640
+                key: "cmd+shift+?"; keyTitle: qsTr("Controls")
+                color: surface; rounding: 0; shape: "square, cut 26, square, square"; animation: 320
+                onOpenChanged: if (open) { keyQuery = ""; keyFind.forceActiveFocus(); }
+                Stack {
+                    grow: 1
+                    Shader { source: "shaders/dots.metal"; running: false; params: [16, 0.9, 0, 0.6]; colors: [alpha(ink, light ? 0.14 : 0.10)] }
+                    Column {
+                        padding: 32; spacing: 18
+                        Row {
+                            spacing: 16; valign: "top"
+                            Heading { grow: 1; code: qsTr("Controls"); ghost: "CONTROLS"; title: qsTr("Every key, and what it does."); sub: caps(qsTr("%1 keys", keyItems.length)) }
+                            Close { onClicked: controls.open = false }
+                        }
+                        Rectangle {
+                            height: 34; shape: "cut 8, square, square, square"; color: container; border.width: 1; border.color: keyQuery ? primary : hairline; horizontalPadding: 12; valign: "center"
+                            Row {
+                                spacing: 10
+                                Text { text: ">>"; font.family: fontMono; font.mono: true; font.size: 11; font.weight: "bold"; color: keyQuery ? primary : caption }
+                                TextField { id: keyFind; grow: 1; text: keyQuery; autofocus: true; placeholder: qsTr("Find a key, or what it does"); font.family: fontUi; font.size: 14; color: ink
+                                    onTextChanged: keyQuery = text; onCancelled: controls.open = false }
+                            }
+                        }
+                        Loader { grow: 1
+                            delegate: List {
+                                grow: 1; spacing: 24; fade: 0.04
+                                model: keyGroups
+                                delegate: Row {
+                                    spacing: 28; valign: "top"
+                                    Column {
+                                        width: 176; spacing: 5; verticalPadding: 7
+                                        Row { spacing: 8
+                                            Text { text: "◆"; font.size: 9; color: fromColor(modelData.from) }
+                                            Text { text: modelData.name; font.family: fontUi; font.size: 14; font.weight: "medium"; color: ink; wrap: true; width: 150 } }
+                                        Text { text: "// " + caps(modelData.from === "rex" ? qsTr("Rex's menus") : modelData.from === "init.lua" ? "init.lua" : "endfield")
+                                            font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.5; color: caption }
+                                    }
+                                    Grid {
+                                        grow: 1; columns: 1; spacing: 0
+                                        model: modelData.items
+                                        delegate: Column {
+                                            Rectangle { height: 1; color: hairline; visible: index > 0 }
+                                            Row {
+                                                spacing: 12; verticalPadding: 7
+                                                Text { text: modelData.what; font.family: fontUi; font.size: 13; color: ink }
+                                                Item { grow: 1 }
+                                                KeyCap { key: modelData.key }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Column {
+                            spacing: 10
+                            Rectangle { height: 1; color: hairline }
+                            Row {
+                                spacing: 18
+                                Row { spacing: 6; Text { text: "◆"; font.size: 9; color: signal }; Text { text: qsTr("endfield's docks"); font.family: fontUi; font.size: 11; color: caption } }
+                                Row { spacing: 6; Text { text: "◆"; font.size: 9; color: lime }; Text { text: "init.lua"; font.family: fontUi; font.size: 11; color: caption } }
+                                Row { spacing: 6; Text { text: "◆"; font.size: 9; color: blue }; Text { text: qsTr("Rex's menus"); font.family: fontUi; font.size: 11; color: caption } }
+                                Item { grow: 1 }
+                                KeyCap { key: "esc"; small: true }
+                                Text { text: qsTr("closes"); font.family: fontUi; font.size: 11; color: caption }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Column {
+            halign: "center"
+            Item { grow: 1 }
+            Column {
+                halign: "center"
+                Column {
+                    spacing: 12
+                    Gauge { visible: !!skSan && skSan.max > 0; width: 44; stacked: true; label: "SAN"; value: skSan && skSan.max ? sanity / skSan.max : 0
+                        text: String(sanity); segments: 6; thickness: 3; appear: motion ? "flicker" : ""; appearDelay: 200
+                        tint: skSan && sanity >= skSan.max ? orange : signal; tip: skSan ? qsTr("Sanity %1/%2", sanity, skSan.max) : "" }
+                    Gauge { width: 44; stacked: true; label: "CPU"; value: sys.state.cpu || 0; text: pct(sys.state.cpu); segments: 6; thickness: 3; appear: motion ? "flicker" : ""; appearDelay: 240
+                        tint: busy > 0.6 ? orange : signal }
+                    Gauge { width: 44; stacked: true; label: "MEM"; value: sys.state.mem || 0; text: gb(sys.state.memUsed); segments: 6; thickness: 3; appear: motion ? "flicker" : ""; appearDelay: 280
+                        tint: (sys.state.mem || 0) > 0.9 ? red : signal }
+                    Gauge { width: 44; stacked: true; label: "DISK"; value: sys.state.disk || 0; text: pct(sys.state.disk); segments: 6; thickness: 3; appear: motion ? "flicker" : ""; appearDelay: 320
+                        tint: (sys.state.disk || 0) > 0.9 ? red : signal }
+                    Row {
+                        visible: hasBattery; spacing: 3
+                        appear: motion ? "flicker" : ""; appearDelay: 360
+                        Icon { name: sys.state.charging ? "bolt.fill" : "battery.75"; font.size: 11; color: (sys.state.battery || 1) < 0.15 ? red : sys.state.charging ? primary : inkDim }
+                        Text { text: pct(sys.state.battery); font.family: fontNum; font.size: 12; font.tabular: true; color: ink }
+                    }
+                }
+            }
+            Item { height: 52 }
+        }
+    }
+}

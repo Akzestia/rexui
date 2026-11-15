@@ -1,0 +1,178 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "top"; height: 0; span: "window"; resizable: false
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var primary: pal[4]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+    property var clay: "#d97757"
+    property var olive: "#788c5d"
+    property var fig: "#c46686"
+    property var kraft: "#d4a27f"
+    property bool motion: conf.values["clay-motion"] !== "false"
+
+    property bool showQuiet: false
+    property real now: Date.now()
+    property var items: panel.open ? activity.list : []
+
+    function rank(s) { return s === "blocked" ? 0 : s === "error" ? 1 : s === "working" ? 2 : s === "done" ? 3 : 4 }
+    function tint(s) { return s === "blocked" ? kraft : s === "error" ? fig : s === "working" ? clay : s === "done" ? olive : outline }
+    function glyph(s) {
+        return s === "blocked" ? "hand.raised.fill" : s === "error" ? "exclamationmark" : s === "working" ? "ellipsis"
+             : s === "done" ? "checkmark" : "moon.zzz"
+    }
+    function name(a) {
+        const t = /^[^@\s]+@[^:\s]+:/.test(a.title || "") ? "" : a.title
+        return a.statusTitle || (a.app === "claude-code" ? "Claude Code" : "") || t || a.process || qsTr("Terminal")
+    }
+    function why(a) {
+        if (a.message) return a.message
+        if (a.status === "blocked")
+            return a.waitReason === "permission" ? qsTr("Waiting for your permission") : a.waitReason === "question" ? qsTr("Asking you something")
+                 : a.waitReason === "authentication" ? qsTr("Waiting to sign in") : qsTr("Waiting on you")
+        if (a.status === "error") return a.lastExit != null ? qsTr("Exited with %1", a.lastExit) : qsTr("Failed")
+        if (a.status === "working") return a.progress > 0 ? Math.round(a.progress * 100) + "%" : qsTr("Working")
+        if (a.status === "done") return qsTr("Done")
+        return a.title && a.title !== name(a) ? a.title : ""
+    }
+    function home(p) { return String(p || "").replace(/^\/Users\/[^/]+/, "~") }
+    function where(a) {
+        const tab = /^Window [0-9a-f]+$/.test(a.tabLabel || "") ? "" : a.tabLabel || ""
+        return [tab, home(a.cwd)].filter((x) => x).join("  ·  ")
+    }
+    function ago(t) {
+        if (!t) return ""
+        const s = Math.max(0, (now - t) / 1000)
+        return s < 60 ? qsTr("now") : s < 3600 ? Math.floor(s / 60) + "m" : s < 86400 ? Math.floor(s / 3600) + "h" : Math.floor(s / 86400) + "d"
+    }
+    function count(s) { return items.filter((a) => a.status === s).length }
+    property var groups: [
+        { title: qsTr("Needs you"), items: items.filter((a) => rank(a.status) < 2) },
+        { title: qsTr("Working"), items: items.filter((a) => a.status === "working") },
+        { title: qsTr("Done"), items: items.filter((a) => a.status === "done") },
+        { title: qsTr("Quiet"), items: showQuiet ? items.filter((a) => rank(a.status) === 4) : [], quiet: true },
+    ].filter((g) => g.items.length || g.quiet)
+    property string summary: {
+        const parts = []
+        if (count("blocked")) parts.push(qsTr("%1 waiting", count("blocked")))
+        if (count("error")) parts.push(qsTr("%1 failed", count("error")))
+        if (count("working")) parts.push(qsTr("%1 working", count("working")))
+        if (count("done")) parts.push(qsTr("%1 done", count("done")))
+        return parts.length ? parts.join("  ·  ") : qsTr("All quiet")
+    }
+
+    function show(a) {
+        if (a.session && a.session !== rex.sessionId) rex.run("session.select", { session_id: a.session })
+        rex.api("session.focus_block", { session_id: a.session || rex.sessionId, block_id: a.block }).catch(() => {})
+        panel.open = false
+    }
+
+    Component.onCompleted: activity.delegate(() => conf.values["clay-activity"] === "rex" ? "rex" : "docks")
+
+    Timer { interval: 15000; running: panel.open; repeat: true; onTriggered: now = Date.now() }
+
+    Drawer {
+        id: panel
+        lazy: true
+        placement: "center"; rounding: 20; color: surface; animation: 380
+        width: 520; height: 560
+        command: ["client.sidebar.activity.toggle"]
+        exclusive: "rex-panels"
+        onCommanded: now = Date.now()
+
+        Column {
+            grow: 1; padding: 24; spacing: 16
+
+            Row {
+                spacing: 12
+                Stack { width: 22; height: 22; Shader { source: "shaders/spark.metal"; colors: [clay]; params: [12, 0, 1, 1]; running: motion && panel.open && count("working") > 0; fps: 30 } }
+                Column {
+                    spacing: 1
+                    Text { text: qsTr("Activity"); font.family: "serif"; font.size: 24; color: ink }
+                    Text { text: summary; font.size: 12; font.italic: summary === qsTr("All quiet"); color: inkDim }
+                }
+                Item { grow: 1 }
+                Stack {
+                    visible: count("done") > 0
+                    Rectangle {
+                        radius: 15; height: 30; horizontalPadding: 12; border.width: 1; border.color: hairline; halign: "center"; valign: "center"
+                        Text { text: qsTr("Mark seen"); font.size: 12; color: inkDim }
+                    }
+                    Button { stateRadius: 15; tip: qsTr("Clear the done ones, as viewing them would"); onClicked: activity.markSeen(items.filter((a) => a.status === "done").map((a) => a.block)) }
+                }
+                Stack {
+                    Rectangle { width: 30; height: 30; radius: 15; border.width: 1; border.color: hairline; halign: "center"; valign: "center"; Icon { name: "xmark"; font.size: 11; color: inkDim } }
+                    Button { stateRadius: 15; tip: qsTr("Close"); tipKeys: "cmd+."; onClicked: panel.open = false }
+                }
+            }
+
+            List {
+                grow: 1; spacing: 18
+                model: groups
+                delegate: Column {
+                    spacing: 6
+                    property var group: modelData
+                    Row {
+                        spacing: 8
+                        Text { text: group.title.toUpperCase(); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: group.quiet ? outline : primary }
+                        Text { text: group.quiet ? String(items.filter((a) => rank(a.status) === 4).length) : String(group.items.length); font.size: 10.5; font.tabular: true; color: outline }
+                        Item { grow: 1 }
+                        Stack {
+                            visible: !!group.quiet
+                            Text { text: showQuiet ? qsTr("Hide") : qsTr("Show"); font.size: 11; color: inkDim }
+                            Button { onClicked: showQuiet = !showQuiet }
+                        }
+                    }
+                    Rectangle {
+                        visible: group.items.length > 0
+                        radius: 12; color: container; border.width: 1; border.color: hairline; padding: 4
+                        Column {
+                            List {
+                                model: group.items
+                                delegate: Stack {
+                                    property bool hot: false
+                                    Rectangle { radius: 8; color: hot ? containerHigh : "transparent"; colorAnimation: 140 }
+                                    Row {
+                                        spacing: 12; horizontalPadding: 12; verticalPadding: 9
+                                        Stack {
+                                            width: 28; height: 28; halign: "center"; valign: "center"
+                                            Rectangle { color: "#29" + tint(modelData.status).slice(1); radius: 14 }
+                                            Icon { name: glyph(modelData.status); color: tint(modelData.status); font.size: 11; font.bold: true }
+                                        }
+                                        Column {
+                                            grow: 1; spacing: 2
+                                            Row {
+                                                spacing: 8
+                                                Text { grow: 1; text: name(modelData); font.size: 13.5; font.weight: "medium"; color: modelData.status === "idle" ? inkDim : ink; maxLines: 1 }
+                                                Text { text: ago(modelData.updatedAt); font.size: 11; font.tabular: true; color: outline }
+                                            }
+                                            Text { visible: !!why(modelData); text: why(modelData); font.size: 12; color: modelData.status === "blocked" || modelData.status === "error" ? tint(modelData.status) : inkDim; maxLines: 2 }
+                                            Stack {
+                                                visible: modelData.status === "working" && modelData.progress > 0
+                                                width: 200; height: 3
+                                                Rectangle { radius: 1.5; color: hairline }
+                                                Row { halign: "left"; Rectangle { width: 200 * Math.min(1, modelData.progress || 0); height: 3; radius: 1.5; color: clay; animate: 300 } }
+                                            }
+                                            Text { visible: !!where(modelData); text: where(modelData); font.size: 11; color: outline; maxLines: 1 }
+                                        }
+                                    }
+                                    Button { stateRadius: 8; onHoveredChanged: hot = hovered; onClicked: show(modelData) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

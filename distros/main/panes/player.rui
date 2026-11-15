@@ -1,0 +1,159 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    title: "Now Playing"; icon: "music.note"
+    padding: 24; halign: "center"; valign: "center"
+    color: surface
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var colors: prefs.state.colors
+    property bool light: colors ? !!colors.light : !theme.dark
+    property var rose: (light ? "fff8f8 faeaed f4e4e7 efdfe2 8b4a62 ffffff ffd9e3 6f334a 74565f ffffff ffd9e3 5a3f48 7d5636 4e6355 22191c 514347 837377 d5c2c6"
+                              : "191114 261d20 31282a 3c3235 ffb0ca 541d34 6f334a ffd9e3 e2bdc7 422932 5a3f48 ffd9e3 f0bc95 b5ccba efdfe2 d5c2c6 9e8c91 514347").split(" ").map((c) => "#" + c)
+    property var pal: colors ? ["surface", "container", "containerHigh", "containerHighest", "primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "success", "ink", "inkDim", "outline", "outlineVariant"].map((k) => colors[k]) : rose
+    property var surface: pal[0]
+    property var containerHighest: pal[3]
+    property var primary: pal[4]
+    property var onPrimary: pal[5]
+    property var primaryContainer: pal[6]
+    property var secondary: pal[8]
+    property var secondaryContainer: pal[10]
+    property var onSecondaryContainer: pal[11]
+    property var tertiary: pal[12]
+    property var ink: pal[14]
+    property var inkDim: pal[15]
+    property var outlineVariant: pal[17]
+
+    Process { id: media; command: "rexui-media" }
+    Process {
+        id: vis; command: "rexui-visualiser"
+        onMessage: if (message && message.state && message.state.frames) send(heard)
+    }
+    property string heard: JSON.stringify({ bundle: media.state.bundle || "", muted: media.state.muted || [] })
+    onHeardChanged: vis.send(heard)
+    property bool active: !!media.state.active
+    property bool isPlaying: !!media.state.playing
+    function rankColor(r) { return ({ SS: "#de31ae", S: "#02b5c3", A: "#88da20", B: "#e3b130", C: "#ff8e5d", D: "#ff5a5a" })[r] || "#808080"; }
+    function rankInk(r, silver) {
+        if (r === "SS" || r === "S") return silver ? "#e4f2f8" : "#ffd04f";
+        return ({ A: "#275227", B: "#553a2b", C: "#473625", D: "#512525" })[r] || "#000000";
+    }
+    function starColor(s) {
+        var at = [0.1, 1.25, 2, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9];
+        var c = ["#4290fb", "#4fc0ff", "#4fffd5", "#7cff4f", "#f6f05c", "#ff8068", "#ff4e6f", "#c645b8", "#6563de", "#18158e", "#000000"];
+        function mix(a, b, t) {
+            var out = "#";
+            for (var i = 1; i < 7; i += 2) {
+                var v = Math.round(parseInt(a.substr(i, 2), 16) * (1 - t) + parseInt(b.substr(i, 2), 16) * t);
+                out += (v < 16 ? "0" : "") + v.toString(16);
+            }
+            return out;
+        }
+        if (s < at[0]) return "#aaaaaa";
+        for (var i = 1; i < at.length; i++) if (s < at[i]) return mix(c[i - 1], c[i], (s - at[i - 1]) / (at[i] - at[i - 1]));
+        return "#000000";
+    }
+    property real progress: media.state.duration ? Math.min(1, (media.state.position || 0) / media.state.duration) : 0
+    property real seeking: -1
+    function mmss(t) { t = Math.max(0, Math.floor(t || 0)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); }
+    function control(c) { media.send({ cmd: c }); }
+
+    Stack {
+        width: 520; height: 640; radius: 36; color: pal[1]
+
+        Shapes {
+            moving: isPlaying
+            colors: [primaryContainer, secondaryContainer, tertiary, outlineVariant]
+            opacities: light ? [0.34, 0.34, 0.08, 0.2] : [0.16, 0.16, 0.04, 0.16]
+        }
+
+        Column {
+            padding: 28; spacing: 6; halign: "center"
+            Stack {
+                width: 340; height: 340; halign: "center"; valign: "center"
+                Visualiser {
+                    frames: vis.state.frames || ""
+                    cover: 220; gap: 14; shape: "cookie12"; spin: isPlaying ? 23500 : 0
+                    color: primary
+                }
+                Stack {
+                    width: 220; height: 220
+                    Image { source: media.state.artwork || ""; shape: "cookie12"; spin: isPlaying ? 23500 : 0; color: containerHighest }
+                    Icon { name: "music.note"; font.size: 64; color: inkDim; visible: !media.state.artwork }
+                }
+            }
+            Item { height: 8 }
+            Text { width: 440; align: "center"; maxLines: 1; font.size: 22; font.weight: "semibold"; color: ink; text: active ? media.state.title || "Unknown title" : "Nothing playing" }
+            Text { width: 440; align: "center"; maxLines: 1; font.size: 15; color: secondary; text: active ? media.state.artist || "Unknown artist" : "Play something for it to show up here" }
+            Row {
+                halign: "center"; spacing: 6; visible: active && !!media.state.difficulty
+                Rectangle {
+                    width: 40; height: 20; radius: 10; halign: "center"; valign: "center"; visible: !!media.state.rank; color: rankColor(media.state.rank)
+                    Text { text: media.state.rank || ""; font.size: 12; font.weight: "heavy"; color: rankInk(media.state.rank, media.state.rankSilver) }
+                }
+                Rectangle {
+                    height: 20; radius: 10; horizontalPadding: 7; valign: "center"; visible: !!media.state.stars; color: starColor(media.state.stars || 0)
+                    Text { text: "★ " + (media.state.stars || 0).toFixed(2); font.size: 11; font.weight: "bold"; color: media.state.stars >= 6.5 ? "#ffd966" : "#1b1b1f" }
+                }
+                Text { maxLines: 1; font.size: 13; color: inkDim; text: "[" + (media.state.difficulty || "") + "]" }
+            }
+            Text { width: 440; align: "center"; maxLines: 1; font.size: 12; color: inkDim; text: active ? (media.state.player || "") : "" }
+            Item { height: 14 }
+            Row {
+                width: 440; spacing: 8
+                Text { width: 44; align: "center"; font.size: 12; font.mono: true; color: inkDim; text: mmss(seeking >= 0 ? seeking * media.state.duration : media.state.position) }
+                Stack {
+                    grow: 1; height: 24
+                    Arc {
+                        line: true; value: seeking >= 0 ? seeking : progress
+                        wavy: true; waves: 6; waving: isPlaying; thickness: 6; gap: 6
+                        color: primary; track: secondaryContainer
+                        seekable: media.state.duration > 0 && media.state.seekable !== false
+                        onMoved: seeking = value
+                        onReleased: { media.send({ seek: value * media.state.duration }); seeking = -1; }
+                    }
+                }
+                Text { width: 44; align: "center"; font.size: 12; font.mono: true; color: inkDim; text: media.state.duration > 0 ? mmss(media.state.duration) : "--:--" }
+            }
+            Item { height: 14 }
+            Row {
+                spacing: 8; halign: "center"
+                Stack {
+                    Rectangle {
+                        width: 48; height: 52; radius: media.state.shuffle ? 16 : 24; color: media.state.shuffle ? secondary : secondaryContainer; halign: "center"; valign: "center"; animate: 200
+                        Icon { name: "shuffle"; font.size: 15; color: media.state.shuffle ? onPrimary : onSecondaryContainer }
+                    }
+                    Button { enabled: active; onClicked: control("shuffle") }
+                }
+                Stack {
+                    Rectangle {
+                        width: 56; height: 52; radius: 26; color: secondaryContainer; halign: "center"; valign: "center"
+                        Icon { name: "backward.fill"; font.size: 18; color: onSecondaryContainer }
+                    }
+                    Button { enabled: active; onClicked: control("previous") }
+                }
+                Stack {
+                    Rectangle {
+                        width: 96; height: 52; radius: isPlaying ? 16 : 26; color: primary; halign: "center"; valign: "center"; animate: 200
+                        Icon { name: isPlaying ? "pause.fill" : "play.fill"; font.size: 20; color: onPrimary }
+                    }
+                    Button { enabled: active; onClicked: control("toggle") }
+                }
+                Stack {
+                    Rectangle {
+                        width: 56; height: 52; radius: 26; color: secondaryContainer; halign: "center"; valign: "center"
+                        Icon { name: "forward.fill"; font.size: 18; color: onSecondaryContainer }
+                    }
+                    Button { enabled: active; onClicked: control("next") }
+                }
+                Stack {
+                    Rectangle {
+                        width: 48; height: 52; radius: media.state.repeat ? 16 : 24; color: media.state.repeat ? secondary : secondaryContainer; halign: "center"; valign: "center"; animate: 200
+                        Icon { name: media.state.repeat === 1 ? "repeat.1" : "repeat"; font.size: 15; color: media.state.repeat ? onPrimary : onSecondaryContainer }
+                    }
+                    Button { enabled: active; onClicked: control("repeat") }
+                }
+            }
+        }
+    }
+}

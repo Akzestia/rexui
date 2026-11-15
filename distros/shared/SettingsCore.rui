@@ -1,0 +1,499 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Item {
+    id: core
+    width: 0; height: 0; visible: false
+    property var cmdField
+    property var cmdk
+    property var confSettle
+    property var expectEnd
+    property var prefs
+    property var run
+    property var rx
+    property var search
+    property var sections: []
+    property string nvimDir: "~/Library/Caches/rexui"
+    property string nvimSock: nvimDir + "/config.nvim"
+    property string configPath: file === 0 ? ((rx.state.paths || {}).init || "") : ((rx.state.paths || {}).conf || "")
+    function sq(s) { const t = String(s); const home = t.startsWith("~/"); return (home ? "~/" : "") + "'" + (home ? t.slice(2) : t).split("'").join("'\\''") + "'"; }
+    property string nvimRemote: "nvim --server " + sq(nvimSock) + " --remote " + sq(configPath) + " 2>/dev/null; true"
+    property var nvimListen: ["sh", "-c", "mkdir -p " + sq(nvimDir) + " && rm -f " + sq(nvimSock) + " && exec nvim --listen " + sq(nvimSock) + " " + sq(configPath || "init.lua")]
+    function opts(s) { return String(s).split("|").map((o) => { const i = o.indexOf(":"); return i < 0 ? [o, o] : [o.slice(0, i), o.slice(i + 1)]; }); }
+    function hd(label) { return { k: "heading", label: label }; }
+    function note(label) { return { k: "note", label: label }; }
+    function sw(key, label, def, help) { return { k: "switch", key: key, label: label, def: def, help: help || "" }; }
+    function ch(key, label, def, o, help) { return { k: "choice", key: key, label: label, def: def, options: opts(o), help: help || "" }; }
+    function multi(key, label, o, help) { return { k: "multi", key: key, label: label, def: [], options: opts(o), help: help || "" }; }
+    function nm(key, label, def, min, max, step, unit, help) { return { k: "number", key: key, label: label, def: def, min: min, max: max, step: step, unit: unit || "", help: help || "" }; }
+    function tx(key, label, def, help, hint) { return { k: "text", key: key, label: label, def: def, help: help || "", hint: hint || "" }; }
+    function col(key, label, def, help) { return { k: "color", key: key, label: label, def: def, help: help || "" }; }
+    function act(run, label, help, button, args) { return { k: "action", run: run, label: label, help: help || "", button: button || "Run", args: args || null }; }
+    function rexuiOpt(r) { r.src = "conf"; return r; }
+    function via(r, section, kind, label) { r.ui = { section: section, kind: kind, label: label || r.label }; return r; }
+    function paneBehavior(r) { r.ui.page = "Customize pane behavior"; return r; }
+    function customize() { return ["View", "Customize View"]; }
+    function menuChoice(sub, label, o, ui, value, prefs) {
+        const options = opts(o);
+        const title = (v) => (options.find((p) => p[0] === v) || [])[1];
+        return { k: "choice", label: label, options: options, ui: ui, get: value,
+                 put: (v) => { if (title(v) && [].concat(sub).some((s) => rex.menu(customize().concat(s, title(v))))) expect(prefs(v)); } };
+    }
+    function sectionOf(special) { return sections.findIndex((s) => s.special === special); }
+    function rexSections(o, own) {
+        return [
+            { title: "Server", icon: "server.rack", rows: [
+                { k: "info", label: "Rex Server", get: () => rx.state.client ? qsTr("Running · this app is %1", rx.state.client.split(":").pop().slice(-6)) : qsTr("Not connected") },
+                core.act("client.server.restart", "Restart the server", "Sessions keep running in it; this app reconnects.", "Restart…"),
+                core.hd("Tailscale"),
+                core.sw("rex.server.tailnet-enabled", "Access Rex from your other devices", false, "Over Tailscale. Rex's own settings sign you in."),
+                core.tx("rex.server.tailnet-hostname", "Hostname", "", "", "rex"),
+                core.tx("rex.server.tailnet-tags", "Tags", "", "Comma separated."),
+                core.sw("rex.server.tailnet-allow-tailnet-members", "Tailnet members may connect", false),
+                core.hd("Client Info"),
+                core.tx("rex.client.label", "Label", "", "What other clients call this Mac.", "My Mac"),
+                core.via(core.sw("rex.client.remoteControl", "Remote Control", false, "Let Rex and other clients perform actions in this app. rexui's panel needs it to run commands."), "Server", "switch"),
+            ] },
+            { title: "Interface", icon: "macwindow", rows: [
+                core.hd("Appearance"),
+                core.menuChoice("Color Scheme", "Color scheme", "system:Auto|light:Light|dark:Dark", { section: "Interface", kind: "choice", label: "Color scheme" },
+                           () => core.val({ key: "Workspace.appearance", def: "system" }), (v) => ({ "Workspace.appearance": v })),
+                core.menuChoice("Interface Style", "Interface style", "glass:Glass|classic:Classic", { section: "Interface", kind: "choice", label: "Interface style" },
+                           () => core.val({ key: "Workspace.usesPaneGlass", def: false }) ? "glass" : "classic", (v) => ({ "Workspace.usesPaneGlass": v === "glass" })),
+                { k: "switch", label: "Tint with theme", ui: { section: "Interface", kind: "switch", label: "Tint with theme" },
+                  get: () => ["useTheme", "blendTheme"].includes(core.val({ key: "Workspace.interfaceStyle", def: "modern" })),
+                  put: (on) => { if (rex.menu(core.customize().concat("Interface Style", "Tint with theme"))) core.expect({ "Workspace.interfaceStyle": on ? "useTheme" : "modern" }); } },
+                core.hd("Tabs"),
+                core.menuChoice(["Toolbar Layout", "Tab Style"], "Tab style", "above:Above|left:Left Side|right:Right Side", { section: "Interface", kind: "segment", label: "Tab style" },
+                           () => core.val({ key: "Workspace.tabStyle", def: "horizontal" }) === "horizontal" ? "above" : core.val({ key: "Workspace.sidebarPosition", def: "left" }),
+                           (v) => v === "above" ? { "Workspace.tabStyle": "horizontal" } : { "Workspace.tabStyle": "vertical", "Workspace.sidebarPosition": v }),
+                core.via(core.sw("Workspace.tabsFillAvailableSpace", "Fill available space", false), "Interface", "switch", "Fill available space"),
+                core.via(core.nm("Workspace.tabIconCount", "Show tab icons", 3, 0, 5, 1, "", "Show up to five pane icons in horizontal tabs."), "Interface", "slider"),
+                core.via(core.ch("Workspace.tabIconColorMode", "Use color for tab icons", "always", "always:Always|activeTabs:Active tab|activePanes:Active panes|never:Never"), "Interface", "popup"),
+                core.ch("Workspace.tabIconTintMode", "Tab icon tint", "off", "off:Off|accent:Accent|terminal:Terminal|shell:Shell|foreground:Foreground|background:Background"),
+                core.sw("Workspace.bouncesTabIcons", "Bounce tab icons", true, "When a program in a background tab wants attention."),
+                core.hd("Sidebar"),
+                core.nm("Workspace.sidebarWidth", "Sidebar width", 220, 140, 420, 10, " pt"),
+                core.ch("Workspace.sidebarSwipe", "Swipe to show the sidebar", "swipe", "swipe:Swipe|optionSwipe:⌥ Swipe|off:Off"),
+                core.sw("Workspace.preservesWindowWidthOnSidebarToggle", "Keep the window's width when the sidebar toggles", false),
+                core.act("client.sidebar.toggle", "Show or hide the sidebar", "", "Toggle"),
+                core.hd("Panes"),
+                core.menuChoice("Pane Style", "Pane style", "comfortable:Comfortable|compact:Compact", { section: "Interface", kind: "segment", label: "Pane style" },
+                           () => core.val({ key: "Workspace.paneDensity", def: "comfortable" }), (v) => ({ "Workspace.paneDensity": v })),
+                core.via(core.sw("Workspace.showsPaneHeaders", "Show pane headers", true, "Pane headers are always shown when the vertical sidebar is hidden or positioned on the right."), "Interface", "switch"),
+                core.via(core.sw("Workspace.tintsPanesWithProgramBackground", "Match program backgrounds", true, "Colors a pane and its header with the background a full-screen program such as an editor paints."), "Interface", "switch"),
+                core.hd("Animation"),
+                core.via(core.ch("Workspace.animationStyle", "Animation style", "natural", "snappy:Snappy|natural:Natural|off:Off", "Reduce Motion in System Settings turns them off, unless rexui's Pane motion is on."), "Interface", "segment"),
+                core.hd("App Icon"),
+                core.via(core.ch("Workspace.appIcon", "App icon", "dynamic", "dynamic:Dynamic|bright:Bright|twilight:Twilight"), "Interface", "choice"),
+                core.via(core.ch("Workspace.appIconVisibility", "Show app icon", "dockAndMenuBar", "dockAndMenuBar:Dock and menu bar|dockOnly:Dock|menuBarOnly:Menu bar"), "Interface", "popup"),
+                core.via(core.sw("Workspace.showsWindowOnLaunch", "Show window on launch", true), "Interface", "switch"),
+            ] },
+            { title: "Pane Behavior", icon: "rectangle.split.2x1", rows: [
+                core.hd("Active Pane"),
+                core.paneBehavior(core.via(core.sw("Workspace.showsActivePaneBorder", "Highlight active pane edges", false, "Highlights the edges of the focused pane. The highlight follows focus between panes."), "Interface", "switch")),
+                core.col("Workspace.activePaneBorderColor", "Active pane border color", "", "Empty: the theme's accent."),
+                core.nm("Workspace.activePaneBorderOpacity", "Active pane border opacity", 1, 0, 1, 0.05),
+                core.ch("Workspace.activePaneBorderTransition", "Active pane border animation", "natural", "snappy:Snappy|natural:Natural|off:Off"),
+                core.paneBehavior(core.via(core.ch("Workspace.inactivePaneFadeMode", "Fade inactive panes", "both", "none:Off|styling:Styling|text:Text|both:Both", "Fades the panes you're not in: their chrome, their text, or both."), "Interface", "popup")),
+                core.paneBehavior(core.via(core.sw("Workspace.usesInactivePaneStylesInInactiveWindows", "Fade panes for inactive windows", true, "On: while Rex isn't the app in front, every pane looks inactive (no active border). Off: the Fade inactive panes choice applies to every pane."), "Interface", "switch")),
+                core.hd("Splits & Focus"),
+                core.paneBehavior(core.via(core.sw("Workspace.balancesSplitsOnCreation", "Autobalance splits", true, "Evenly resizes a tab's panes whenever a pane is created or closed."), "Interface", "switch")),
+                core.paneBehavior(core.via(core.sw("Workspace.focusFollowsMouse", "Focus follows mouse", false, "Focuses a pane when you move the pointer over it, without clicking."), "Interface", "switch")),
+                core.multi("Workspace.hiddenPaneButtons", "Hidden pane buttons", "splitRight:Split right|splitDown:Split down|float:Float|zoom:Zoom|close:Close"),
+                core.act("pane.balance", "Balance splits now", "", "Balance"),
+            ] },
+            { title: "Themes", icon: "paintpalette", rows: [
+                core.ch("Workspace.appearance", "Color scheme", "system", "system:Auto|light:Light|dark:Dark"),
+                core.hd("Light Mode"),
+                { k: "themes", mode: "light", key: "Workspace.lightThemeID", def: "merino-light", label: "Light theme", put: (v) => core.putTheme("light", v), ui: { section: "Themes", kind: "choice", label: "Light theme" },
+                  names: ["Merino Light", "Alpine Milk", "Buttercream Diner", "Coastal Linen", "Glacier Mint", "Ivory Gallery", "Lavender Postcard", "Newsprint Fog", "Orchard Breeze", "Peach Veranda", "Porcelain Morning", "Silver Point Light", "Sunlit Parchment", "Terracotta Noon"] },
+                core.sw("Workspace.lightUsesExtendedThemePalette", "Use extended theme palette", true, "Off: a standard set of extended colors."),
+                core.hd("Dark Mode"),
+                { k: "themes", mode: "dark", key: "Workspace.darkThemeID", def: "merino-dark", label: "Dark theme", put: (v) => core.putTheme("dark", v), ui: { section: "Themes", kind: "choice", label: "Dark theme" },
+                  names: ["Merino Dark", "Abyssal Trench", "Basalt Shore", "Cathode Amber", "Charcoal Atelier", "Cinder Peak", "Cobalt Foundry", "Ember Hollow", "Heliotrope Haze", "Ink Meridian", "Juniper Smoke", "Midnight Tundra", "Misty Forest", "Moss Cathedral", "Neon Arcade", "Nocturne Rose", "Oxblood Library", "Petrol Lagoon", "Phosphor Archive", "Polar Aurora", "Roasted Umber", "Saffron Nightfall", "Silver Point Dark", "Sonoran Dusk", "Static Noir", "Velvet Dusk", "Whitby Bay"] },
+                core.sw("Workspace.darkUsesExtendedThemePalette", "Use extended theme palette", true, "Off: a standard set of extended colors."),
+                core.hd("Import Theme"),
+                { k: "import", label: "Import a theme file", help: "A Ghostty or iTerm theme. It's matched to an appearance by its background." },
+                core.act("client.theme.change", "Browse with previews", "Rex's theme picker.", "Browse…"),
+            ] },
+            { title: "Terminal", icon: "terminal", rows: [
+                core.hd("Typography"),
+                { k: "font", key: "Workspace.terminalFontName", label: "Terminal font", def: "SF Mono" },
+                core.nm("Workspace.terminalFontPointSize", "Font size", 12, 8, 32, 0.5, " pt"),
+                core.via(core.sw("Workspace.terminalFontSmoothing", "Font smoothing", false), "Terminal", "switch"),
+                core.via(core.sw("Workspace.terminalAllowsLigatures", "Ligatures", true), "Terminal", "switch"),
+                core.nm("Workspace.terminalCellHeightPercent", "Line height", 0, -20, 60, 1, "%", "An adjustment, in percent."),
+                core.ch("Workspace.terminalFontStyle", "Style", "regular", "regular:Regular|bold:Bold|italic:Italic|boldItalic:Bold Italic"),
+                core.tx("Workspace.terminalFallbackFontNames", "Fallback fonts", "", "Used in order for characters the terminal font doesn't have. Comma separated."),
+                core.hd("Colors"),
+                core.via(core.sw("Workspace.terminalImproveTextContrast", "Improve text contrast", true, "Adjust unreadable text against its background."), "Terminal", "switch"),
+                core.via(core.sw("Workspace.terminalUseThemePalette", "Force theme palette for text", false, "Map text colors to the nearest theme color."), "Terminal", "switch"),
+                core.hd("Cursor"),
+                core.via(core.ch("Workspace.terminalCursorStyle", "Cursor style", "block", "block:Block|bar:Bar|underline:Underline"), "Terminal", "popup"),
+                { k: "choice", label: "Blink speed", options: core.opts("normal:Normal|custom:Custom"),
+                  get: () => core.val({ key: "Workspace.terminalCursorBlinkUsesCustomInterval", def: false }) ? "custom" : "normal",
+                  put: (v) => core.put({ "Workspace.terminalCursorBlinkUsesCustomInterval": v === "custom" }) },
+                core.nm("Workspace.terminalCursorBlinkIntervalMilliseconds", "Blink interval", 600, 100, 2000, 50, " ms", "With a custom blink speed."),
+                core.via(core.sw("Workspace.terminalCursorStyleForced", "Force style", false, "Ignore application requests to change cursor shape."), "Terminal", "switch"),
+                core.hd("Keyboard"),
+                core.via(core.sw("Workspace.showsKeySequenceHints", "Show key sequence hints", true), "Terminal", "switch"),
+                core.via(core.ch("Workspace.terminalOptionKeyBehavior", "Option key", "automatic", "automatic:Automatic|composesText:Types characters|actsAsAlt:Alt|leftActsAsAlt:Left is Alt|rightActsAsAlt:Right is Alt", "Automatic sends Alt on U.S. layouts and types special keys elsewhere."), "Terminal", "popup"),
+                core.hd("Scrolling"),
+                core.via(core.sw("Workspace.terminalSmoothScrolling", "Smooth scrolling", false, "Move through terminal history smoothly with a trackpad or Magic Mouse."), "Terminal", "switch"),
+                core.hd("Padding"),
+                core.via(core.ch("Workspace.terminalPaddingColor", "Padding color", "extend", "background:Background|extend:Extend|extendAlways:Always extend"), "Terminal", "popup"),
+                core.hd("Selection"),
+                core.via(core.sw("Workspace.terminalCopyOnSelect", "Copy on selection", false), "Terminal", "switch"),
+                core.via(core.sw("Workspace.terminalCopyAnimation", "Play animation on copy", true), "Terminal", "switch"),
+                core.via(core.ch("Workspace.terminalSelectionForeground", "Foreground", "theme", "theme:Theme|cellForeground:Text color|cellBackground:Cell color"), "Terminal", "popup"),
+                core.ch("Workspace.terminalSelectionBackground", "Background", "theme", "theme:Theme|cellForeground:Text color|cellBackground:Cell color"),
+                core.via(core.sw("Workspace.terminalSelectionRoundedCorners", "Rounded corners", true), "Terminal", "switch"),
+                core.hd("Integrated Path Browser"),
+                core.via(core.sw("Workspace.insertPathShowsRecentPaths", "Show recently used paths", true, "Insert Path (⌃⌘I) types the path of a file or folder at the cursor."), "Terminal", "switch"),
+                core.hd("Titles"),
+                core.via(core.sw("Workspace.prefersGeneratedTitles", "Prefer generated titles", true, "Show the running program and its directory instead of titles that shells set."), "Terminal", "switch"),
+                core.hd("Shell"),
+                core.tx("Workspace.terminalStartupCommand", "Startup command", "", "Executable and arguments. Applies to new terminals on this Mac."),
+                core.hd("Font size now"),
+                core.act("client.font.increase", "Bigger", "", "A+"),
+                core.act("client.font.decrease", "Smaller", "", "A−"),
+                core.act("client.font.reset", "Default size", "", "Reset"),
+            ] },
+            { title: "Shortcuts", icon: "command", special: "shortcuts", rows: [] },
+            { title: "Integrations", icon: "puzzlepiece.extension", rows: [
+                core.hd("Coding Agents"),
+                core.act("client.agents.setup", "Integrate with available agents", o.agentsHelp || "Installs a Rex skill and session hooks: Claude Code, Codex, OpenCode and Pi learn how to use Rex.", "Install"),
+                core.hd("Agent Behavior"),
+                core.via(core.sw("rex.agents.names-sessions", "Let agents name sessions", true, "Agents label the session after the task they're working on. Applies to new agent sessions."), "Integrations", "switch"),
+            ] },
+            { title: "Notifications", icon: "bell.badge", rows: [
+                core.hd("In-App Notifications"),
+                core.via(core.ch("Workspace.notificationPosition", "Notification position", "bottomRight", "topLeft:Top left|topCenter:Top center|topRight:Top right|bottomLeft:Bottom left|bottomCenter:Bottom center|bottomRight:Bottom right"), "Notifications", "choice"),
+                core.hd("Program Activity"),
+                core.note("How status from processes and agents is handled."),
+                core.via(core.sw("Workspace.showsProgramStatusInTabs", "Show activity in tabs", true), "Notifications", "switch"),
+                core.via(core.sw("Workspace.showsProgramActivityNotifications", "Show system notifications", true), "Notifications", "switch"),
+                core.via(core.sw("Workspace.showsProgramActivityDockBadge", "Badge Dock icon", true), "Notifications", "switch"),
+                core.via(core.sw("Workspace.playsProgramActivitySounds", "Play sounds", true), "Notifications", "switch"),
+                core.via(core.sw("Workspace.showsIdleProgramsInActivity", "Include idle processes in activity", true), "Notifications", "switch"),
+                core.via(core.sw("Workspace.showsProcessesInActivity", "Show each process in tabs", true), "Notifications", "switch"),
+                core.act("client.sidebar.activity.toggle", "Activity", "", "Toggle"),
+                core.hd("System Notifications"),
+                core.via(core.sw("Workspace.allowsTerminalNotifications", "Terminal notifications", true, "Programs can send notifications with OSC 9 or OSC 777."), "Notifications", "switch"),
+                core.act("client.permissions", "Grant system permissions", "", "Grant…"),
+            ] },
+            { title: "Remote Hosts", icon: "network", rows: [
+                core.act("client.host.switch", "Switch host", "", "Switch…"),
+                core.act("client.host.add", "Add a remote host", "", "Add…"),
+                core.act("client.host.remove", "Remove a host", "", "Remove…"),
+                core.act("client.pair_device", "Pair a device", "With a QR code.", "Pair…"),
+                core.act("session.open_on_web", "Open this session on the web", "", "Open…"),
+            ] },
+            { title: "Developer", icon: "hammer", rows: [
+                core.hd("Developer"),
+                core.via(core.sw("rex.developer-mode-enabled", "Developer Mode", false, "Expose settings for development and debugging."), "Developer", "switch"),
+                core.hd("App Version"),
+                core.sw("SUEnableAutomaticChecks", "Check for updates automatically", true),
+                core.act("client.update.accept", "Install the update", "", "Install"),
+                core.hd("Rex Installation"),
+                core.via(core.ch("rex.server.run-mode", "Location", "bundled", "bundled:Included with Rex.app|source:Source checkout"), "Developer", "popup"),
+                core.tx("rex.server.source-checkout-path", "Source checkout", "", "", "~/src/rex"),
+                core.sw("rex.server.automatic-restart-enabled", "Restart the server when it changes", true),
+                core.sw("rex.server.block-plugin-reload-enabled", "Reload block plugins", false),
+                core.hd("Local API"),
+                { k: "info", label: "Local API URL", get: () => { const r = (rx.state.defaults || {})["rex.local-server.cached-route.v1"]; return r && r.endpoint ? decodeURIComponent(r.endpoint) : "—"; } },
+                core.hd("Web Client Origins"),
+                core.tx("rex.server.web-client-origin-patterns", "Allowed origins", "", "Browser origins allowed to open Rex WebSocket streams, comma separated. https://rex.superlogical.com is always allowed."),
+                core.hd("Diagnostics"),
+                core.act("client.diagnostics", "Rex Diagnostics", "", "Open"),
+                core.act("client.version.copy", "Copy version info", "", "Copy"),
+                core.act("client.debug.copy", "Copy debug info", "", "Copy"),
+            ] },
+            { title: o.title || "rexui", icon: o.icon || "sparkles", rows: [
+                core.rexuiOpt(core.ch("language", "Language", "auto", "auto:Auto|en:English|ja:日本語", "The docks' language. Auto: the first of English and Japanese in macOS's preferred languages.")),
+                core.hd("Window"),
+                core.rexuiOpt(core.sw("transparency", "See-through background", true)),
+                core.rexuiOpt(core.nm("background-opacity", "Opacity", 0.85, 0, 1, 0.01)),
+                core.rexuiOpt(core.nm("background-blur", "Blur", 0, 0, 100, 1, " pt", "What's behind the window, blurred by macOS. 0: none.")),
+                core.rexuiOpt(core.sw("traffic-lights", "Close, minimise and zoom buttons", false)),
+                core.rexuiOpt(core.sw("tab-bar", "Rex's tab bar", false)),
+                core.rexuiOpt(core.sw("pane-buttons", "Pane buttons", true, "Split, maximise and close at each pane's top right.")),
+                core.rexuiOpt(core.sw("pane-scrollbars", "Scroll bars in panes", true, "The terminal's, while it has scrollback. Scrolling still works without them.")),
+                core.rexuiOpt(core.sw("single-window", "One window", true, "New Window brings the window forward instead of opening another. Rex reopens only one window at launch either way.")),
+                core.rexuiOpt(core.tx("window-padding-x", "Padding at the sides", "0", "Points: one number, or left,right.")),
+                core.rexuiOpt(core.tx("window-padding-y", "Padding top and bottom", "10,0", "Points: one number, or top,bottom.")),
+                core.hd("Motion"),
+                core.rexuiOpt(core.sw("pane-motion", "Pane motion", true, "A split opening, a pane closing or moving: the panes glide there (Pane glide's duration and curve), the new one pops in. rui-config.lua's pane_motion = \"rex\" gives Rex's own motion instead.")),
+                core.rexuiOpt(core.sw("pane-glide", "Panes glide to a new size", true, "A dock shown or hidden, the padding changed: the panes glide there instead of jumping. With a dock's slide they keep its pace.")),
+                core.rexuiOpt(core.nm("pane-glide-duration", "Glide duration", 300, 0, 1000, 10, " ms", "When no dock's slide sets the pace.")),
+                core.rexuiOpt(core.sw("focus-ring", "Focus ring", true, "The outline round a button or list that has the keyboard (Tab).")),
+                core.rexuiOpt(core.sw("link-in-pane", "⌘⇧-click opens a link in a pane", true, "The page in a new split beside the terminal, instead of the browser. ⌘-click still opens the browser.")),
+                core.rexuiOpt(core.sw("rex-sidebar", "Rex's sidebar", false, "Rex's own sidebar, its tabs moved into it (View > Show Sidebar, ⌘/, a swipe, Tab style Left or Right). Off: however it's shown, it's put away at once, its tabs above (the docks' tab numbers need them there).")),
+                core.rexuiOpt(core.sw("pane-drop-links", "A link dropped on a pane opens there", false, "A link dragged from a browser onto a terminal opens as a page over that pane (as rexui pane does), instead of its address being typed in. Files and text are typed as ever.")),
+                core.rexuiOpt(core.tx("quit-key", "Quit from anywhere", "", "A key that quits Rex UI whatever has the keys, a pane's app or page too (their ⌘Q quits only them): cmd+shift+q. Empty: none.")),
+                core.rexuiOpt(core.sw("pane-keep", "Panes keep their apps", false, "Quitting Rex UI leaves the apps, pages and widgets in panes running: they're back when Rex UI is, a page where it was. Off: they quit with it.")),
+                core.rexuiOpt(core.sw("pane-inherit", "Splits keep the pane's look", false, "A new split shows what the pane it split from shows (its picture, background and frame) instead of the default.")),
+                core.rexuiOpt(core.sw("pane-drag", "Drag panes", true, "Hold the key below and drag a pane: it leaves the layout while it's carried, and dropped on another pane's half it splits in there. Esc puts it back; a click that doesn't move stays a click.")),
+                core.rexuiOpt(core.ch("pane-drag-modifier", "Drag with", "cmd", "cmd:⌘ Command|ctrl:⌃ Control|alt:⌥ Option|cmd+shift:⌘⇧ Command-Shift|ctrl+alt:⌃⌥ Control-Option")),
+                core.rexuiOpt(core.sw("tab-slide", "Tabs slide", true, "Switching tabs slides them, both live.")),
+                core.rexuiOpt(core.nm("tab-slide-duration", "Slide duration", 300, 0, 1000, 10, " ms")),
+                core.rexuiOpt(core.ch("pane-scroll", "Scrolling", "smooth", "smooth:Smooth|rex:Rex's own", "Smooth: a wheel notch glides, a trackpad is followed once per frame, settling on a row. Rex's own: a wheel jumps by rows (a trackpad is smooth with Rex's Terminal > Smooth scrolling).")),
+                core.rexuiOpt(core.nm("pane-scroll-lines", "Rows per wheel notch", 3, 1, 20, 1, "")),
+                core.rexuiOpt(core.nm("pane-scroll-duration", "Wheel glide", 150, 0, 600, 10, " ms")),
+                core.rexuiOpt(core.nm("pane-scroll-trackpad-duration", "Trackpad smoothing", 40, 0, 300, 5, " ms", "0: followed exactly, once per frame.")),
+                core.rexuiOpt(core.nm("pane-scroll-speed", "Trackpad speed", 1, 0.25, 4, 0.05, "×")),
+                core.rexuiOpt(core.sw("pane-scroll-bounce", "Bounce at the ends", true, "Scrolling past the top or bottom of the scrollback stretches the terminal, and a spring brings it back. Smooth scrolling only.")),
+                core.rexuiOpt(core.nm("pane-scroll-bounce-size", "Bounce stretch", 80, 10, 300, 5, " pt", "The farthest it stretches.")),
+                core.rexuiOpt(core.tx("pane-scroll-bounce-spring", "Bounce spring", "11, 0.72", "Frequency (lower: softer, slower), damping (below 1 it swings past and back; lower: more).")),
+                core.hd("Background GIF"),
+                core.rexuiOpt(core.tx("background-gif", "GIF", "", "A path; empty: none.")),
+                core.rexuiOpt(core.sw("background-gif-visible", "Show the GIF", true, "Off: hidden, its file and place kept.")),
+                core.rexuiOpt(core.nm("background-gif-height", "Height", 160, 40, 600, 10, " pt")),
+                core.rexuiOpt(core.ch("background-gif-position", "Corner", "bottom-right", "top-left:Top left|top-right:Top right|center:Centre|bottom-left:Bottom left|bottom-right:Bottom right")),
+                core.rexuiOpt(core.nm("background-gif-margin", "Margin", 16, 0, 120, 2, " pt")),
+                core.rexuiOpt(core.nm("background-gif-opacity", "Opacity", 1, 0, 1, 0.05)),
+                core.hd("Docks"),
+                core.rexuiOpt(core.sw("ui", "Docks", true, "The distro's .rui files (rexui load).")),
+                core.rexuiOpt(core.nm("tab-preview-width", "Tab dropdown preview width", 480, 240, 1200, 20, " pt", "The tab dropdown's live preview of the hovered tab.")),
+                core.rexuiOpt(core.nm("tab-peek-width", "Numeral preview width", 480, 240, 1200, 20, " pt", "The preview under the tab numerals, as one is hovered.")),
+                core.rexuiOpt(core.nm("tab-preview-zoom", "Tab preview zoom", 1.5, 1, 4, 0.1, "×", "The tab dropdown's live preview: 1 shows the whole tab, more draws it bigger from its top left.")),
+                core.hd("Command Palette"),
+                core.rexuiOpt(core.ch("command-palette", "Command palette", "rexui", "rexui:" + (o.palette || "rexui's") + "|rex:Rex's own", "Which one Command Palette… (its key, its menu item) opens.")),
+                core.rexuiOpt(core.nm("command-palette-width", "Width", 560, 360, 1000, 20, " pt", "rexui's palette.")),
+            ] },
+        ].concat(own || [], [
+            { title: "Config", icon: "doc.text", special: "config", rows: [] },
+            { title: "Commands", icon: "list.bullet.rectangle", special: "commands", rows: [] },
+        ]);
+    }
+    property int section: 1
+    property string query: ""
+    property var page: sections[section]
+    property var pageList: sections.concat([{ title: "Search", search: true, rows: [] }])
+    function found(q) {
+        q = q.toLowerCase();
+        const out = [];
+        let left = 40, more = 0;
+        for (const s of sections) {
+            const hit = s.rows.filter((r) => r.k !== "heading" && r.k !== "note" &&
+                                             ((r.label + " " + (r.help || "") + " " + qsTr(r.label) + " " + qsTr(r.help) + " " + (r.key || "")).toLowerCase().includes(q)));
+            if (hit.length > left) more += hit.length - left;
+            const shown = hit.slice(0, left);
+            left -= shown.length;
+            if (shown.length) out.push(hd(s.title), ...shown);
+        }
+        if (more) out.push(note(qsTr("%1 more: keep typing to narrow it down.", more)));
+        return out.length ? out : [note(qsTr("Nothing matches “%1”.", query))];
+    }
+    function val(r) {
+        if (r.get) return r.get();
+        if (r.src === "conf") {
+            const v = r.key in confPending ? confPending[r.key] : conf.values[r.key];
+            if (v === undefined) return r.def;
+            if (r.k === "switch") return v === "true";
+            if (r.k === "number") return parseFloat(v);
+            return v;
+        }
+        if (r.key in pending) return pending[r.key] === null ? r.def : pending[r.key];
+        const d = rx.state.defaults || {};
+        return r.key in d ? d[r.key] : r.def;
+    }
+    function isSet(r) { return r.src === "conf" ? (r.key in confPending ? confPending[r.key] !== undefined : r.key in conf.values) : (r.key in pending ? pending[r.key] !== null : r.key in (rx.state.defaults || {})); }
+    function setv(r, v) {
+        if (r.src === "conf") {
+            const t = v === null ? null : String(v);
+            const p = Object.assign({}, confPending);
+            if (t === null) p[r.key] = undefined; else p[r.key] = t;
+            confPending = p;
+            confSettle.running = false;
+            confSettle.running = true;
+            rx.send({ conf: { [r.key]: t } });
+        }
+        else if (r.put) r.put(v);
+        else put({ [r.key]: v });
+    }
+    function toggleIn(r, v) {
+        const a = (val(r) || []).slice();
+        const i = a.indexOf(v);
+        if (i >= 0) a.splice(i, 1); else a.push(v);
+        setv(r, a);
+    }
+    function chosen(r, v) { return r.k === "multi" ? (val(r) || []).includes(v) : String(val(r)) === String(v); }
+    function choose(r, v) { if (r.k === "multi") toggleIn(r, v); else if (r.put) r.put(v); else setv(r, v); }
+    function slug(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+    function themeChoices(r) {
+        const mine = customThemes.filter((t) => (t.appearance || "dark") === r.mode).map((t) => [t.id, t.name + " ★"]);
+        return mine.concat(r.names.map((n) => [slug(n), n]));
+    }
+    function snap(r, v) { const s = r.step || 1; return Math.round(Math.round(v / s) * s * 1000) / 1000; }
+    function shown(r) {
+        const v = val(r);
+        if (r.k !== "number") return String(v);
+        return (r.step < 1 && r.max <= 1 ? Math.round(v * 100) + "%" : snap(r, v) + r.unit);
+    }
+    function clearSearch() { search.text = ""; query = ""; }
+    function putTheme(mode, id) {
+        put({ [mode === "light" ? "Workspace.lightThemeID" : "Workspace.darkThemeID"]: id });
+        if ((mode === "dark") === theme.dark) run("client.theme.change", { name: id });
+    }
+    property var pending: ({})
+    property var confPending: ({})
+    function put(values) {
+        pending = Object.assign({}, pending, values);
+        for (const k in values) rex.set(k, values[k]);
+        rx.send({ refresh: "defaults" });
+    }
+    function expect(values) {
+        pending = Object.assign({}, pending, values);
+        rx.send({ refresh: "defaults" });
+        expectEnd.running = false;
+        expectEnd.running = true;
+    }
+    function settle(defaults) {
+        const left = {};
+        for (const k in pending) {
+            const want = pending[k], have = defaults[k];
+            if (want === null ? have !== undefined : JSON.stringify(want) !== JSON.stringify(have)) left[k] = want;
+        }
+        if (Object.keys(left).length !== Object.keys(pending).length) pending = left;
+    }
+    property var customThemes: rx.state.defaults ? (rx.state.defaults["Workspace.customThemes"] || []) : []
+    property var fonts: rx.state.fonts || []
+    property string keyFilter: ""
+    property var shortcutRows: shortcuts(rx.state.actions || [], rx.state.bindings || [], keyFilter.toLowerCase())
+    function shortcuts(actions, binds, q) {
+        const keysOf = (name) => binds.filter((b) => b.action === name).map((b) => b.key);
+        const known = new Set(actions.map((a) => a.name));
+        const extra = [...new Set(binds.map((b) => b.action).filter((n) => !known.has(n)))].map((n) => ({ name: n, title: n }));
+        return extra.concat(actions)
+            .map((a) => ({ name: a.name, title: a.title, keys: keysOf(a.name) }))
+            .filter((r) => !q || (r.title + " " + qsTr(r.title) + " " + r.name + " " + r.keys.join(" ")).toLowerCase().includes(q));
+    }
+    property string filter: ""
+    property var commands: (rx.state.actions || []).filter((a) => !filter || (a.title + " " + qsTr(a.title) + " " + a.name).toLowerCase().includes(filter.toLowerCase()))
+    property int file: 0
+    property bool ownPalette: (conf.values["command-palette"] || "rexui") !== "rex"
+    property int cmdWidth: Number(conf.values["command-palette-width"]) || 560
+    property string cmdQuery: ""
+    property int cmdPicked: 0
+    property var cmdKeys: ({})
+    property var cmdRecent: []
+    property bool cmdOpen: false
+    property var cmdAsk: null
+    property string cmdArg: ""
+    property var cmdAll: cmdOpen ? cmdBuild(rx.state.actions || [], rx.state.bindings || [], rex.titles, cmdKeys) : []
+    property var cmdFound: cmdOpen ? cmdFind(cmdAll, cmdRecent, cmdQuery) : []
+    property int cmdShown: 40
+    property var cmdItems: cmdFound.slice(0, cmdShown)
+    function cmdScore(text, q) {
+        if (!q) return 1;
+        const t = (text || "").toLowerCase(), at = t.indexOf(q);
+        if (at === 0) return 100;
+        if (at > 0) return " .-_:".includes(t[at - 1]) ? 80 : 60;
+        let from = 0, last = -1, gaps = 0;
+        for (const c of q) {
+            if (c === " ") continue;
+            const k = t.indexOf(c, from);
+            if (k < 0) return 0;
+            if (last >= 0) gaps += k - last - 1;
+            last = k;
+            from = k + 1;
+        }
+        return Math.max(1, 40 - gaps);
+    }
+    function cmdKey(k) {
+        const mods = { ctrl: "⌃", alt: "⌥", opt: "⌥", option: "⌥", shift: "⇧", cmd: "⌘", super: "⌘" };
+        const names = { enter: "↩", return: "↩", tab: "⇥", space: "Space", escape: "⎋", esc: "⎋", backspace: "⌫",
+                        up: "↑", down: "↓", left: "←", right: "→" };
+        const parts = k.toLowerCase().split("+"), last = parts.pop();
+        const order = "⌃⌥⇧⌘";
+        const m = parts.map((x) => mods[x] || "").sort((x, y) => order.indexOf(x) - order.indexOf(y)).join("");
+        return m + (names[last] || last.toUpperCase());
+    }
+    property var cmdIcons: ({
+        "Window": "macwindow", "App": "app", "Session": "terminal", "Host": "server.rack", "Tab": "square.on.square",
+        "Pane": "rectangle.split.2x1", "Keys": "keyboard", "Find": "magnifyingglass", "View": "eye", "Server": "gearshape.2",
+        "Light theme": "sun.max", "Dark theme": "moon",
+        "client.settings": "gearshape", "client.theme.change": "paintpalette", "client.theme.import": "square.and.arrow.down",
+        "client.font.increase": "textformat.size.larger", "client.font.decrease": "textformat.size.smaller", "client.font.reset": "textformat.size",
+        "pane.split.down": "rectangle.split.1x2", "pane.split.up": "rectangle.split.1x2", "pane.close": "xmark.square",
+        "pane.zoom": "arrow.up.left.and.arrow.down.right", "pane.float": "macwindow.on.rectangle", "client.tab.new": "plus.square.on.square",
+        "client.tab.close": "xmark.square", "client.window.new": "macwindow.badge.plus", "session.new": "plus.rectangle",
+        "client.sidebar.toggle": "sidebar.left", "client.find.open": "magnifyingglass", "client.config.reload": "arrow.clockwise",
+        "client.appearance.switch_mode": "circle.lefthalf.filled", "pane.send_key": "keyboard", "client.update.accept": "arrow.down.circle",
+    })
+    function cmdBuild(actions, binds, tabs, keys) {
+        const keysOf = (name, title) => {
+            const menu = keys[title] || keys[title.replace(" Pane", "")] || "";
+            const out = /[^⌃⌥⇧⌘]$/.test(menu) ? [menu] : [];
+            for (const b of binds) if (b.action === name && !out.includes(cmdKey(b.key))) out.push(cmdKey(b.key));
+            return out;
+        };
+        const cap = (v) => v.charAt(0).toUpperCase() + v.slice(1);
+        const known = new Set(actions.map((a) => a.name));
+        let items = [];
+        for (const a of actions) {
+            if (a.name === "client.palette.toggle") continue;
+            const titled = a.title && a.title !== a.name;
+            const title = titled ? a.title : a.name.split(".").slice(-2).map((w) => w.split("_").map(cap).join(" ")).join(": ");
+            const it = { title: title, label: qsTr(title), name: a.name, args: null, keys: titled ? keysOf(a.name, title) : [], kind: a.category || (titled ? "" : "Server"),
+                         words: (a.keywords || "") + " " + a.name, about: a.about || {}, last: !titled, search: !titled };
+            it.icon = cmdIcons[a.name] || cmdIcons[it.kind] || "command";
+            const need = (a.args || []).filter((x) => !x.endsWith("?"));
+            const choices = need.length === 1 && (it.about[need[0]] || {}).choices;
+            if (choices) {
+                for (const v of choices) if (!known.has(a.name + "." + v))
+                    items.push(Object.assign({}, it, { title: title + ": " + cap(v), label: qsTr(title) + ": " + qsTr(cap(v)), args: { [need[0]]: v }, keys: keysOf(a.name + "." + v, title + " " + cap(v)) }));
+            }
+            else if (need.length) items.push(Object.assign({}, it, { title: title + "…", label: qsTr(title) + "…", ask: need }));
+            else items.push(it);
+        }
+        items = items.concat((tabs || []).map((t, i) => ({ title: "Go to Tab " + (i + 1) + (t ? ": " + t : ""), label: qsTr("Go to Tab %1", i + 1) + (t ? ": " + t : ""), name: "client.tab.goto", args: { index: i + 1 }, keys: [], kind: "Tab", icon: "square.on.square", words: "tab" })));
+        for (const s of sections) for (const r of s.rows) if (r.k === "themes")
+            for (const n of r.names) items.push({ title: "Theme: " + n, label: qsTr("Theme: %1", n), name: "client.theme.change", args: { name: n }, keys: [], kind: r.mode === "light" ? "Light theme" : "Dark theme", icon: r.mode === "light" ? "sun.max" : "moon", words: "theme colour color", search: true });
+        return items;
+    }
+    function cmdFind(items, recent, q) {
+        q = q.trim().toLowerCase();
+        const scored = [];
+        for (const it of items) {
+            if (it.search && !q) continue;
+            const s = Math.max(cmdScore(it.title, q), cmdScore(it.label, q), cmdScore(it.words, q) * 0.4) * (it.last ? 0.3 : 1);
+            const seen = recent.indexOf(it.title);
+            if (s > 0) scored.push([s + (seen >= 0 ? (q ? 5 : 200) - seen : 0), it]);
+        }
+        scored.sort((a, b) => b[0] - a[0] || a[1].label.localeCompare(b[1].label));
+        return scored.map((p) => p[1]);
+    }
+    function cmdMove(d) {
+        const n = cmdItems.length;
+        if (n) cmdPicked = (cmdPicked + (d === "up" ? -1 : 1) + n) % n;
+    }
+    function cmdRun(it) {
+        if (!it) return;
+        cmdRecent = [it.title].concat(cmdRecent.filter((t) => t !== it.title)).slice(0, 6);
+        if (it.ask) {
+            cmdAsk = { it: it, need: it.ask, args: {} };
+            cmdField.text = cmdArg = "";
+            return;
+        }
+        cmdk.open = false;
+        rex.run(it.name, it.args || undefined);
+    }
+    function cmdGive(text) {
+        const a = cmdAsk, name = a.need[0];
+        const type = (a.it.about[name] || {}).type;
+        const args = Object.assign({}, a.args, { [name]: type === "integer" || type === "number" ? Number(text) : text });
+        if (a.need.length > 1) {
+            cmdAsk = { it: a.it, need: a.need.slice(1), args: args };
+            cmdField.text = cmdArg = "";
+            return;
+        }
+        cmdk.open = false;
+        rex.run(a.it.name, args);
+    }
+    function cmdAbout(a) {
+        const t = (a.it.about[a.need[0]] || {}).about || "";
+        return t.split(/(?<=\.) /)[0];
+    }
+}

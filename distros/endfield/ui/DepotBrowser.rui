@@ -1,0 +1,610 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Row {
+    id: browser
+    property var closer: null
+    property real room: 1120
+    property bool compact: room < 760
+    property bool narrow: room < 560
+    property bool sideOpen: false
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    property var places: ({ home: "", favourites: [], volumes: [] })
+    property string cur: ""
+    property var entries: []
+    property string error: ""
+    property var back: []
+    property var forward: []
+    property bool hidden: false
+    property bool grid: false
+    property var picked: []
+    property var selected: containerHigh
+    property var dropTint: alpha(signal, 0.3)
+    property string anchor: ""
+    property var lastClick: ({ path: "", t: 0 })
+    property string query: ""
+    property var found: []
+    property bool searching: false
+    property var clip: null
+    property string renaming: ""
+    property string note: ""
+    property var apps: []
+    property var peek: ({ text: "", binary: true })
+
+    property var shown: query ? found : entries
+    property int iconCols: Math.max(2, Math.min(8, Math.floor((room - (narrow && !sideOpen ? 0 : narrow ? 190 : 220) - (compact ? 0 : 274) - 70) / 108)))
+    property var one: picked.length === 1 ? (shown.find((e) => e.path === picked[0]) || files.stat(picked[0])) : null
+
+    property var crumbList: { const c = crumbs(cur), n = narrow ? 2 : compact ? 4 : 7; return c.length > n ? c.slice(-n).map((x, i) => i === 0 ? Object.assign({ cut: true }, x) : x) : c }
+    function crumbs(p) {
+        const home = places.home
+        const parts = []
+        let rest = p
+        if (home && (p === home || p.startsWith(home + "/"))) { parts.push({ name: "~", path: home }); rest = p.slice(home.length) }
+        else parts.push({ name: "/", path: "/" })
+        let at = parts[0].path === "/" ? "" : parts[0].path
+        for (const s of rest.split("/").filter((x) => x)) { at += "/" + s; parts.push({ name: s, path: at }) }
+        return parts
+    }
+    function size(n) {
+        if (n == null) return ""
+        if (n < 1000) return n + " B"
+        const u = ["KB", "MB", "GB", "TB"]
+        let i = -1
+        do { n /= 1000; i++ } while (n >= 1000 && i < u.length - 1)
+        return (n < 10 ? n.toFixed(1) : Math.round(n)) + " " + u[i]
+    }
+    function date(ms) {
+        if (!ms) return ""
+        const d = new Date(ms), now = new Date()
+        return d.toDateString() === now.toDateString() ? qsTr("Today") + ", " + d.toLocaleTimeString(i18n.locale, { hour: "2-digit", minute: "2-digit" })
+             : d.toLocaleDateString(i18n.locale, { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" })
+    }
+    function glyph(e) {
+        return e.dir ? "folder.fill" : e.kind === "image" ? "photo" : e.kind === "video" ? "film" : e.kind === "audio" ? "waveform"
+             : e.kind === "code" ? "chevron.left.forwardslash.chevron.right" : e.kind === "text" ? "doc.text" : e.kind === "pdf" ? "doc.richtext"
+             : e.kind === "archive" ? "archivebox" : e.kind === "app" ? "app" : "doc"
+    }
+    function pictured(e) { return e.kind === "image" || e.kind === "video" || e.kind === "pdf" }
+    function kindTint(e) {
+        const k = e.kind;
+        return k === "app" ? signal : k === "code" ? lime : k === "image" ? blue : k === "video" ? magenta : k === "audio" ? mint
+             : k === "pdf" ? red : k === "archive" ? orange : k === "folder" ? lineHot : caption;
+    }
+    function itemCode(e) {
+        if (e.dir) return "DIR";
+        const n = String(e.name), dot = n.lastIndexOf(".");
+        const x = dot > 0 ? n.slice(dot + 1) : "";
+        return (x && x.length <= 4 ? x : e.kind === "app" ? "APP" : "FILE").toUpperCase();
+    }
+    property double noteAt: 0
+    property double typedAt: 0
+    property bool pending: false
+    function say(s) { note = s; noteAt = Date.now() }
+    function failed(r) { return r && r.failed && r.failed.length ? r.failed[0].error : "" }
+
+    function load(p, keep) {
+        files.list(p, { hidden: hidden }).then((r) => {
+            if (cur !== r.path) { picked = keep ? picked : []; query = "" }
+            cur = r.path; entries = r.entries; error = ""
+            if (!keep) picked = picked.filter((x) => r.entries.some((e) => e.path === x))
+            files.watch([r.path])
+        }).catch((e) => { error = String(e) })
+    }
+    function go(p) {
+        if (!p || p === cur) return
+        if (cur) back = back.concat([cur]).slice(-50)
+        forward = []
+        picked = []
+        load(p)
+    }
+    function goBack() { if (!back.length) return; forward = [cur].concat(forward); const p = back[back.length - 1]; back = back.slice(0, -1); picked = []; load(p) }
+    function goForward() { if (!forward.length) return; back = back.concat([cur]); const p = forward[0]; forward = forward.slice(1); picked = []; load(p) }
+    function up() { if (cur && cur !== "/") go(cur.slice(0, cur.lastIndexOf("/")) || "/") }
+
+    function open(e) {
+        if (e.dir) go(e.path)
+        else files.open(e.path)
+    }
+    function click(e) {
+        const now = Date.now()
+        if (lastClick.path === e.path && now - lastClick.t < 380) { lastClick = { path: "", t: 0 }; open(e); return }
+        lastClick = { path: e.path, t: now }
+        const m = rex.modifiers()
+        if (m.cmd) picked = picked.includes(e.path) ? picked.filter((x) => x !== e.path) : picked.concat([e.path])
+        else if (m.shift && anchor) {
+            const list = shown.map((x) => x.path)
+            const a = list.indexOf(anchor), b = list.indexOf(e.path)
+            picked = a < 0 || b < 0 ? [e.path] : list.slice(Math.min(a, b), Math.max(a, b) + 1)
+        } else picked = [e.path]
+        if (!m.shift) anchor = e.path
+    }
+    function done(r, what) {
+        const f = failed(r)
+        say(f ? f : what)
+        load(cur, true)
+    }
+    function paste() {
+        if (!clip) return
+        const op = clip.mode === "cut" ? files.move(clip.paths, cur) : files.copy(clip.paths, cur)
+        const n = clip.paths.length
+        if (clip.mode === "cut") clip = null
+        op.then((r) => { picked = r.done; done(r, qsTr("%1 pasted", n)) })
+    }
+    function trashPicked() {
+        const n = picked.length
+        files.trash(picked).then((r) => { picked = []; done(r, qsTr("%1 moved to the Trash", n)) })
+    }
+    function newFolder() { files.mkdir(cur).then((p) => { picked = [p]; renaming = p; load(cur, true) }).catch((e) => say(String(e))) }
+    function rename(p, name) {
+        renaming = ""
+        if (!name || name === p.split("/").pop()) return
+        files.rename(p, name).then((to) => { picked = [to]; load(cur, true) }).catch((e) => say(String(e)))
+    }
+    function dropInto(dest, paths, copy) {
+        paths = paths.filter((p) => p !== dest && (copy || (p.slice(0, p.lastIndexOf("/")) || "/") !== dest))
+        if (!paths.length) return
+        const op = copy ? files.copy(paths, dest) : files.move(paths, dest)
+        op.then((r) => done(r, (copy ? qsTr("%1 copied to %2", r.done.length, dest.split("/").pop() || "/") : qsTr("%1 moved to %2", r.done.length, dest.split("/").pop() || "/"))))
+    }
+    function dragged(e) { return picked.includes(e.path) ? picked : e.path }
+    function undo() { files.undo().then((r) => done(r, r.undone ? qsTr("Undone") : qsTr("Nothing to undo"))) }
+
+    onOneChanged: {
+        apps = one && !one.dir ? files.apps(one.path).slice(0, 6) : []
+        peek = { text: "", binary: true }
+        const p = one ? one.path : ""
+        if (one && !one.dir && (one.kind === "text" || one.kind === "code") && one.size < 4000000)
+            files.read(p, 6000).then((r) => { if (one && one.path === p) peek = r })
+    }
+    onQueryChanged: { searching = !!query; typedAt = Date.now(); pending = true }
+    onHiddenChanged: if (cur) load(cur, true)
+    function filesChanged(path) { if (path === cur) load(cur, true) }
+    function reveal(paths) {
+        const p = paths[0]
+        const e = files.stat(p)
+        if (!e) return
+        if (e.dir && paths.length === 1) { go(e.path); return }
+        const parent = p.slice(0, p.lastIndexOf("/")) || "/"
+        if (parent !== cur) go(parent)
+        picked = paths.slice()
+        anchor = p
+    }
+
+    Timer {
+        interval: 120; repeat: true; running: pending
+        onTriggered: {
+            if (Date.now() - typedAt < 260) return
+            pending = false
+            const q = query.trim()
+            if (!q) { found = []; searching = false; return }
+            files.search(q, { scope: cur, limit: 300 }).then((r) => { if (query.trim() === q) { found = r; searching = false } })
+        }
+    }
+    Timer { interval: 500; repeat: true; running: !!note; onTriggered: if (Date.now() - noteAt > 3200) note = "" }
+    function start(p) {
+        places = files.places()
+        if (p) go(p)
+        else if (!cur) load(places.home)
+    }
+
+    grow: 1
+    valign: "stretch"
+
+    Rectangle {
+        visible: !narrow || sideOpen
+        width: narrow ? 190 : 220; color: container; padding: 16
+        Column {
+            spacing: 4
+            Column {
+                spacing: 3; horizontalPadding: 6; verticalPadding: 4
+                Text { text: "// " + caps(qsTr("Inventory")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.6; color: caption }
+                Row {
+                    spacing: 10
+                    Icon { name: "shippingbox.fill"; font.size: 14; color: signal }
+                    Text { text: caps(qsTr("Depot")); font.family: fontWide; font.width: "expanded"; font.weight: "bold"; font.size: 15; font.letterSpacing: 0.6; color: ink }
+                }
+            }
+            Item { height: 12 }
+            Text { text: qsTr("Places").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+            List {
+                model: places.favourites
+                delegate: Stack {
+                    id: place
+                    dropFiles: true
+                    onFilesDropped: dropInto(modelData.path, paths, copy)
+                    Rectangle {
+                        radius: 0; horizontalPadding: 10; verticalPadding: 6
+                        color: place.dropHovered ? dropTint : cur === modelData.path ? containerHigh : "transparent"; colorAnimation: 150
+                        border.width: place.dropHovered ? 1 : 0; border.color: signal
+                        Row {
+                            spacing: 10
+                            Icon { name: modelData.icon; font.size: 12; width: 16; color: cur === modelData.path ? primary : caption }
+                            Text { text: modelData.name; font.family: fontUi; font.size: 13; maxLines: 1; color: cur === modelData.path ? ink : inkDim }
+                        }
+                    }
+                    Button { onClicked: go(modelData.path) }
+                }
+            }
+            Item { height: 10 }
+            Text { text: qsTr("Volumes").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+            List {
+                grow: 1
+                model: places.volumes
+                delegate: Stack {
+                    id: vol
+                    dropFiles: true
+                    onFilesDropped: dropInto(modelData.path, paths, copy)
+                    Rectangle {
+                        radius: 0; horizontalPadding: 10; verticalPadding: 6
+                        color: vol.dropHovered ? dropTint : cur === modelData.path ? containerHigh : "transparent"; colorAnimation: 150
+                        border.width: vol.dropHovered ? 1 : 0; border.color: signal
+                        Column {
+                            spacing: 5
+                            Row {
+                                spacing: 10
+                                Icon { name: modelData.removable ? "externaldrive" : "internaldrive"; font.size: 12; width: 16; color: caption }
+                                Text { text: modelData.name; font.family: fontUi; font.size: 13; maxLines: 1; color: inkDim }
+                            }
+                            Rectangle {
+                                width: 160; height: 3; radius: 1.5; color: hairline; halign: "left"
+                                Rectangle { width: 160 * (modelData.capacity ? 1 - modelData.free / modelData.capacity : 0); height: 3; radius: 1.5; color: modelData.free / modelData.capacity < 0.1 ? red : caption }
+                            }
+                            Text { text: qsTr("%1 free of %2", size(modelData.free), size(modelData.capacity)); font.family: fontUi; font.size: 10.5; color: caption }
+                        }
+                    }
+                    Button { onClicked: go(modelData.path) }
+                }
+            }
+        }
+    }
+
+    Column {
+        grow: 1; padding: 20; spacing: 12
+
+        Row {
+            spacing: 6
+            Stack { visible: narrow; Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: "sidebar.left"; font.size: 11; color: sideOpen ? primary : inkDim } } Button { stateRadius: 0; tip: qsTr("Places"); onClicked: sideOpen = !sideOpen } }
+            Stack { Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: "chevron.left"; font.size: 11; color: back.length ? ink : caption } } Button { stateRadius: 0; tip: qsTr("Back"); onClicked: goBack() } }
+            Stack { Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: "chevron.right"; font.size: 11; color: forward.length ? ink : caption } } Button { stateRadius: 0; tip: qsTr("Forward"); onClicked: goForward() } }
+            Stack { Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: "arrow.up"; font.size: 11; color: cur !== "/" ? ink : caption } } Button { stateRadius: 0; tip: qsTr("Enclosing folder"); onClicked: up() } }
+            Item { width: narrow ? 0 : 6 }
+            Row {
+                grow: 1; spacing: 2
+                Row {
+                    visible: crumbList.length > 0; spacing: 2
+                    Icon { visible: 0 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 0 ? crumbList[0].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 1 ? ink : inkDim; font.weight: crumbList.length === 1 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[0].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 1; spacing: 2
+                    Icon { visible: 1 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 1 ? crumbList[1].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 2 ? ink : inkDim; font.weight: crumbList.length === 2 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[1].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 2; spacing: 2
+                    Icon { visible: 2 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 2 ? crumbList[2].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 3 ? ink : inkDim; font.weight: crumbList.length === 3 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[2].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 3; spacing: 2
+                    Icon { visible: 3 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 3 ? crumbList[3].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 4 ? ink : inkDim; font.weight: crumbList.length === 4 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[3].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 4; spacing: 2
+                    Icon { visible: 4 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 4 ? crumbList[4].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 5 ? ink : inkDim; font.weight: crumbList.length === 5 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[4].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 5; spacing: 2
+                    Icon { visible: 5 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 5 ? crumbList[5].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 6 ? ink : inkDim; font.weight: crumbList.length === 6 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[5].path) }
+                    }
+                }
+                Row {
+                    visible: crumbList.length > 6; spacing: 2
+                    Icon { visible: 6 > 0 || crumbList.length > 0 && crumbList[0].cut; name: "chevron.compact.right"; font.size: 10; color: caption }
+                    Stack {
+                        Rectangle {
+                            radius: 0; horizontalPadding: 6; verticalPadding: 4
+                            Text { text: crumbList.length > 6 ? crumbList[6].name : ""; font.family: fontUi; font.size: 13; maxLines: 1; color: crumbList.length === 7 ? ink : inkDim; font.weight: crumbList.length === 7 ? "medium" : "regular" }
+                        }
+                        Button { stateRadius: 0; onClicked: go(crumbList[6].path) }
+                    }
+                }
+            }
+            Rectangle {
+                width: narrow ? 120 : compact ? 170 : 220; radius: 0; color: container; horizontalPadding: 10; verticalPadding: 5; border.width: 1; border.color: hairline
+                Row {
+                    spacing: 8
+                    Icon { name: "magnifyingglass"; font.size: 11; color: inkDim }
+                    TextField { grow: 1; text: query; placeholder: narrow ? qsTr("Search") : qsTr("Search this folder"); font.size: 12.5; color: ink; onTextChanged: query = text; onCancelled: query = "" }
+                }
+            }
+            Stack { Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: hidden ? "eye" : "eye.slash"; font.size: 11; color: hidden ? primary : inkDim } } Button { stateRadius: 0; tip: hidden ? qsTr("Hide hidden files") : qsTr("Show hidden files"); onClicked: hidden = !hidden } }
+            Stack { Rectangle { width: 28; height: 28; radius: 0; halign: "center"; valign: "center"; Icon { name: grid ? "list.bullet" : "square.grid.2x2"; font.size: 11; color: inkDim } } Button { stateRadius: 0; tip: grid ? qsTr("As a list") : qsTr("As icons"); onClicked: grid = !grid } }
+            Stack { visible: !!browser.closer; Rectangle { width: 28; height: 28; radius: 0; border.width: 1; border.color: hairline; halign: "center"; valign: "center"; Icon { name: "xmark"; font.size: 10; color: inkDim } } Button { stateRadius: 0; onClicked: browser.closer() } }
+        }
+
+        Row {
+            grow: 1; spacing: 14; valign: "stretch"
+
+            Rectangle {
+                id: area
+                grow: 1; radius: 0; color: container; border.width: 1; padding: 6
+                border.color: area.dropHovered && !query ? signal : hairline
+                dropFiles: !query
+                onFilesDropped: dropInto(cur, paths, copy)
+                Column {
+                    Row {
+                        visible: !grid; spacing: 10; horizontalPadding: 10; verticalPadding: 6
+                        Item { width: 34 }
+                        Text { grow: 1; text: caps(query ? qsTr("Found under %1", cur.split("/").pop() || "/") : qsTr("Name")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.1; color: caption }
+                        Text { visible: !compact; width: 130; text: caps(qsTr("Kind")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.1; color: caption }
+                        Text { width: 70; text: caps(qsTr("Size")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.1; color: caption }
+                        Text { visible: !narrow; width: 120; text: caps(qsTr("Modified")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.1; color: caption }
+                    }
+                    Rectangle { visible: !grid; height: 1; color: hairline }
+                    Column {
+                        visible: !!error || (!shown.length && !searching); padding: 24; spacing: 6; halign: "center"
+                        Icon { name: error ? "lock" : query ? "magnifyingglass" : "folder"; font.size: 22; color: caption }
+                        Text { text: error ? error : query ? qsTr("Nothing found.") : qsTr("An empty folder."); font.family: fontUi; font.size: 13; color: caption }
+                    }
+                    Text { visible: searching; text: qsTr("Searching…"); font.family: fontUi; font.size: 12; color: caption }
+                    List {
+                        grow: 1; visible: !grid; virtualized: true
+                        model: grid ? [] : shown
+                        delegate: Stack {
+                            id: row
+                            dropFiles: modelData.dir
+                            onFilesDropped: dropInto(modelData.path, paths, copy)
+                            Rectangle {
+                                radius: 0; horizontalPadding: 10; verticalPadding: 5
+                                color: row.dropHovered ? dropTint : picked.includes(modelData.path) ? selected : "transparent"
+                                border.width: row.dropHovered ? 1 : 0; border.color: signal
+                                Row {
+                                    spacing: 10
+                                    Rectangle { width: 2; height: 18; color: kindTint(modelData) }
+                                    Stack {
+                                        width: 26; height: 16
+                                        Rectangle { visible: modelData.kind !== "app"; shape: cutPlate; color: alpha(kindTint(modelData), modelData.dir ? 0.10 : 0.16); border.width: 1; border.color: alpha(kindTint(modelData), 0.6)
+                                            Row { halign: "center"; valign: "center"
+                                                Icon { visible: !!modelData.dir; name: "folder.fill"; font.size: 9; color: picked.includes(modelData.path) ? primary : inkDim }
+                                                Text { visible: !modelData.dir; text: itemCode(modelData); font.family: fontMono; font.mono: true; font.size: 7.5; font.weight: "bold"; color: ink } } }
+                                        Row { visible: modelData.kind === "app"; halign: "center"
+                                            Image { width: 16; height: 16; fit: "contain"; source: modelData.kind === "app" ? "icon:" + modelData.path : "" } }
+                                    }
+                                    Column {
+                                        grow: 1
+                                        visible: renaming !== modelData.path
+                                        Text { text: modelData.name; font.family: fontUi; font.size: 13; maxLines: 1; color: modelData.hidden ? caption : ink }
+                                    }
+                                    Rectangle {
+                                        grow: 1; visible: renaming === modelData.path; radius: 0; color: surface; border.width: 1; border.color: signal; horizontalPadding: 6; verticalPadding: 2
+                                        TextField { text: modelData.name; font.size: 13; color: ink; autofocus: true; onAccepted: rename(modelData.path, text); onCancelled: renaming = "" }
+                                    }
+                                    Text { visible: !compact; width: 130; text: modelData.dir ? qsTr("Folder") : modelData.type; font.family: fontUi; font.size: 12; maxLines: 1; color: inkDim }
+                                    Text { width: 70; text: modelData.dir ? "–" : size(modelData.size); font.family: fontUi; font.size: 12; font.tabular: true; color: inkDim }
+                                    Text { visible: !narrow; width: 120; text: date(modelData.modified); font.family: fontUi; font.size: 12; font.tabular: true; maxLines: 1; color: inkDim }
+                                }
+                            }
+                            Button { visible: renaming !== modelData.path; stateRadius: 0; dragFile: dragged(modelData); onClicked: click(modelData) }
+                        }
+                    }
+                    List {
+                        grow: 1; visible: grid; virtualized: true; padding: 6; spacing: 8
+                        model: grid ? Math.ceil(shown.length / iconCols) : 0
+                        delegate: Grid {
+                            columns: iconCols; spacing: 8
+                            model: shown.slice(index * iconCols, (index + 1) * iconCols)
+                            delegate: Stack {
+                                id: cell
+                                height: 124
+                                dropFiles: modelData.dir
+                                onFilesDropped: dropInto(modelData.path, paths, copy)
+                                Rectangle {
+                                    radius: 0; padding: 8
+                                    color: cell.dropHovered ? dropTint : picked.includes(modelData.path) ? selected : "transparent"
+                                    border.width: cell.dropHovered ? 1 : 0; border.color: signal
+                                    Column {
+                                        spacing: 6; halign: "center"
+                                        Image {
+                                            width: 72; height: 72; radius: pictured(modelData) ? 6 : 0; fit: pictured(modelData) ? "cover" : "contain"
+                                            source: (pictured(modelData) ? "thumb:" : "icon:") + modelData.path + "#" + modelData.modified
+                                        }
+                                        Text { text: modelData.name; font.family: fontUi; font.size: 11.5; maxLines: 2; wrap: true; color: modelData.hidden ? caption : ink }
+                                    }
+                                }
+                                Button { stateRadius: 0; dragFile: dragged(modelData); onClicked: click(modelData) }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: !compact
+                width: 260; radius: 0; color: container; border.width: 1; border.color: hairline; padding: 16
+                Column {
+                    spacing: 10
+                    Column {
+                        visible: !one; spacing: 6; padding: 8
+                        Text { text: picked.length > 1 ? qsTr("%1 items", picked.length) : (cur.split("/").pop() || "/"); font.family: fontUi; font.size: 20; color: ink; maxLines: 2; wrap: true }
+                        Text { text: picked.length > 1 ? size(picked.map((p) => (shown.find((e) => e.path === p) || {}).size || 0).reduce((a, b) => a + b, 0)) : qsTr("%1 items", entries.length); font.family: fontUi; font.size: 12; color: inkDim }
+                    }
+                    Column {
+                        visible: !!one; spacing: 10
+                        Rectangle {
+                            height: 150; radius: 0; color: surface; halign: "center"; valign: "center"
+                            Image { width: 228; height: 150; radius: 0; fit: one && pictured(one) ? "contain" : "contain"
+                                source: one ? ((pictured(one) ? "thumb:" : "icon:") + one.path + "#" + one.modified) : "" }
+                        }
+                        Text { text: one ? one.name : ""; font.family: fontUi; font.size: 17; color: ink; maxLines: 3; wrap: true }
+                        Column {
+                            spacing: 3
+                            Text { text: one ? (one.dir ? qsTr("Folder") : one.type + " · " + size(one.size)) : ""; font.family: fontUi; font.size: 12; color: inkDim; maxLines: 1 }
+                            Text { text: one ? qsTr("Modified %1", date(one.modified)) : ""; font.family: fontUi; font.size: 12; color: inkDim }
+                            Text { text: one ? qsTr("Created %1", date(one.created)) : ""; font.family: fontUi; font.size: 12; color: caption }
+                            Text { visible: !!(one && one.tags && one.tags.length); text: one && one.tags ? one.tags.join(", ") : ""; font.family: fontUi; font.size: 12; color: signal }
+                        }
+                        Column {
+                            visible: apps.length > 0; spacing: 4
+                            Text { text: qsTr("Open with").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                            List {
+                                model: apps
+                                delegate: Stack {
+                                    Rectangle {
+                                        radius: 7; horizontalPadding: 6; verticalPadding: 4
+                                        Row {
+                                            spacing: 8
+                                            Image { width: 16; height: 16; fit: "contain"; source: "icon:" + modelData.path }
+                                            Text { grow: 1; text: modelData.name; font.family: fontUi; font.size: 12.5; maxLines: 1; color: modelData.default ? ink : inkDim }
+                                        }
+                                    }
+                                    Button { stateRadius: 7; onClicked: files.open(one.path, modelData.path) }
+                                }
+                            }
+                        }
+                        Rectangle {
+                            visible: !!peek.text; grow: 1; radius: 0; color: surface; padding: 10
+                            Text { text: peek.text.split("\n").slice(0, 40).join("\n"); font.mono: true; font.family: fontMono; font.size: 10.5; color: inkDim; wrap: true }
+                        }
+                    }
+                }
+            }
+        }
+
+        Row {
+            spacing: 8; horizontalPadding: 2
+            Text { text: note || (picked.length ? qsTr("%1 selected", picked.length) : qsTr("%1 items", shown.length)); font.family: fontUi; font.size: 12; color: note ? signal : inkDim; grow: 1; maxLines: 1 }
+            Stack {
+                visible: picked.length > 0
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "arrow.up.forward.app"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("Open"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: { for (const p of picked) open(shown.find((e) => e.path === p) || files.stat(p)) } }
+            }
+            Stack {
+                visible: picked.length === 1
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "pencil"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("Rename"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: renaming = picked[0] }
+            }
+            Stack {
+                visible: picked.length > 0
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "doc.on.doc"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("Copy"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: { clip = { mode: "copy", paths: picked.slice() }; say(qsTr("%1 to paste", picked.length)) } }
+            }
+            Stack {
+                visible: picked.length > 0
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "scissors"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("Cut"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: { clip = { mode: "cut", paths: picked.slice() }; say(qsTr("%1 to move", picked.length)) } }
+            }
+            Stack {
+                visible: !!clip && !query
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "doc.on.clipboard"; font.size: 10.5; color: primary } Text { visible: !compact; text: qsTr("Paste"); font.size: 12; color: primary } } }
+                Button { stateRadius: 0; onClicked: paste() }
+            }
+            Stack {
+                visible: !query
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "folder.badge.plus"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("New folder"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: newFolder() }
+            }
+            Stack {
+                visible: picked.length > 0
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "trash"; font.size: 10.5; color: red } Text { visible: !compact; text: qsTr("Trash"); font.size: 12; color: red } } }
+                Button { stateRadius: 0; onClicked: trashPicked() }
+            }
+            Stack {
+                visible: true
+                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 12; verticalPadding: 5
+                    Row { spacing: 6; Icon { name: "arrow.uturn.backward"; font.size: 10.5; color: inkDim } Text { visible: !compact; text: qsTr("Undo"); font.size: 12; color: inkDim } } }
+                Button { stateRadius: 0; onClicked: undo() }
+            }
+        }
+    }
+}

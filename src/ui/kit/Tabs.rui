@@ -1,0 +1,20 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Row {
+    id: bar
+    property var tabs: []
+    property int current: 0
+    property var tint: "accent"
+    signal selected(int index)
+    spacing: 4
+    Grid {
+        columns: Math.max(1, bar.tabs.length); spacing: 4
+        model: bar.tabs
+        delegate: Stack {
+            height: 30
+            Text { text: String(modelData); align: "center"; font.weight: index === bar.current ? "semibold" : "regular"; opacity: index === bar.current ? 1 : 0.65 }
+            Rectangle { height: 2; color: index === bar.current ? bar.tint : "transparent"; colorAnimation: 120; transform.y: 28 }
+            Button { stateRadius: 4; cursor: "pointer"; onClicked: { bar.current = index; bar.selected(index) } }
+        }
+    }
+}

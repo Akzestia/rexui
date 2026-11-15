@@ -1,0 +1,13 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: MIT
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+exports_files(["RexPane.swift"])
+
+cc_library(
+    name = "lane",
+    srcs = ["rexpane_lane.c"],
+    hdrs = ["rexpane_lane.h"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)

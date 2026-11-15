@@ -1,0 +1,92 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+use "rexui"
+
+Dock {
+    side: "right"; width: 620
+    spacing: 8
+    group: "side"; title: "Deno · " + address; icon: "icons/deno.png"
+    key: "cmd+shift+e"
+
+    property string address: "localhost:5173"
+    property string target: address.indexOf("://") >= 0 ? address : "http://" + address
+
+    property bool up: false
+    property bool everUp: false
+    property bool checked: false
+    function lost() { up = false; probe.running = true }
+    onTargetChanged: if (!initial) { up = false; everUp = false; checked = false; probe.running = true }
+
+    Process {
+        id: probe
+        command: ["/usr/bin/curl", "-s", "-o", "/dev/null", "--max-time", "1", target]
+        running: true; restart: false
+        onExited: {
+            running = false;
+            const was = up;
+            up = code === 0;
+            checked = true;
+            if (up && !was) {
+                if (everUp) web.load(target);
+                everUp = true;
+            }
+        }
+    }
+    Timer { interval: 2000; running: true; onTriggered: if (!probe.running) probe.running = true }
+
+    property bool editing: false
+    Row {
+        visible: editing
+        spacing: 2
+        Button { icon: "arrow.clockwise"; font.size: 12; opacity: 0.9; onClicked: up ? web.reload() : lost() }
+        Item { width: 6 }
+        Rectangle {
+            grow: 1; radius: 8; color: rgba(128, 128, 128, 0.1)
+            horizontalPadding: 10; verticalPadding: 5
+            TextField {
+                id: field
+                text: address
+                placeholder: "localhost:5173"
+                font.size: 12; font.mono: true
+                onAccepted: { address = text.trim() || "localhost:5173"; editing = false; if (up) web.forceActiveFocus() }
+                onCancelled: { editing = false; if (up) web.forceActiveFocus() }
+            }
+        }
+        Item { width: 6 }
+        Rectangle {
+            width: 8; height: 8; radius: 4
+            color: !up ? (checked ? "#ff453a" : "gray") : web.loading ? "#ffd60a" : "#30d158"
+        }
+    }
+
+    Stack {
+        grow: 1
+        Rectangle {
+            visible: up
+            radius: 10
+            WebView {
+                id: web
+                url: target
+                adblock: false
+                onFailed: lost()
+                onCommand: if (name === "address") { editing = true; field.text = address; field.forceActiveFocus() }
+            }
+        }
+        Rectangle {
+            visible: !up
+            radius: 10; color: rgba(128, 128, 128, 0.08)
+            halign: "center"; valign: "center"
+            Column {
+                spacing: 12; halign: "center"
+                Image { source: "icons/deno.png"; width: 72; height: 72; radius: 16; opacity: everUp ? 0.5 : 1 }
+                Spinner { running: !up; width: 22; height: 22 }
+                Text {
+                    text: !checked ? qsTr("Looking for the dev server") : everUp ? qsTr("The dev server stopped") : qsTr("Waiting for deno task dev")
+                    font.size: 15; font.weight: "semibold"; align: "center"
+                }
+                Text { text: everUp ? qsTr("Back as soon as it is: %1", target) : target; font.mono: true; font.size: 12; opacity: 0.6; align: "center" }
+                Button { text: qsTr("Try now"); font.size: 12; onClicked: lost() }
+            }
+        }
+    }
+}

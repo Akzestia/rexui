@@ -1,0 +1,356 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Panes {
+    radius: 0
+    spotlight: false
+    animation: 260
+    shape: frameSpec(conf.values["endfield-pane-frame"] || "cut")
+    hole: ({ x: 0.5, y: 0.5, r: holeK < 0.02 ? 0 : Math.round(224 * holeK), shape: "triangle" })
+    property bool holeOpen: !!shared.values.wheel
+    property real holeK: 0
+    property real holeFrom: 0
+    property real holeAt: 0
+    onHoleOpenChanged: { holeFrom = holeK; holeAt = Date.now(); if (!motion) holeK = holeOpen ? 1 : 0; }
+    Timer {
+        interval: 16; repeat: true
+        running: motion && holeAt > 0 && holeK !== (holeOpen ? 1 : 0)
+        onTriggered: {
+            const t = Math.min(1, (Date.now() - holeAt) / (holeOpen ? 260 : 180)), e = t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+            holeK = holeFrom + ((holeOpen ? 1 : 0) - holeFrom) * e;
+        }
+    }
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    function frameSpec(f) {
+        return f === "sharp" ? "square" : f === "notch" ? "cut 22, square, square, square" : f === "round" ? "round 10" : cut;
+    }
+    property string fallback: conf.values["endfield-pane-background"] || "blueprint"
+    function confNum(k, d) { const v = parseFloat(conf.values[k]); return isNaN(v) ? d : v; }
+    property real dimDefault: confNum("endfield-pane-dim", 0.72)
+    property real blurDefault: confNum("endfield-pane-blur", 0)
+    property bool several: (panes.list || []).filter((p) => !p.devtools).length > 1
+    function many(p) { return p && !p.zoomed && !p.fullscreen && (p.tabPanes !== undefined ? p.tabPanes > 1 : several); }
+
+    function bgName(b) {
+        const ours = ["blueprint", "survey", "dots", "curtain", "ribbon", "hatch", "media", "none"];
+        const near = { contour: "survey", grid: "blueprint", image: "media" };
+        return ours.indexOf(b) >= 0 ? b : near[b] || fallback;
+    }
+
+    background: Stack {
+        property string bg: bgName((pane.data && pane.data.bg) || fallback)
+        property string media: bg === "media" && pane.data ? pane.data.media || "" : ""
+        property string mediaKind: pane.data && pane.data.mediaKind || "image"
+        property real strength: pane.focused || !many(pane) || pane.devtools ? 1 : 0.6
+        property var own: pane.data || ({})
+        property real mediaDim: Math.max(0, Math.min(1, typeof own.dim === "number" ? own.dim : dimDefault))
+        property real mediaBlur: Math.max(0, typeof own.blur === "number" ? own.blur : blurDefault)
+        property var look: ({
+            blueprint: { f: "grid", p: [24, 5, 4, 0], c: [alpha(ink, 0.035), alpha(ink, 0.07), alpha(signal, 0.22), "#00000000"] },
+            survey: { f: "contour", p: [14, 260, 0.01, 0.7, 0, 0.4], c: [alpha(ink, 0.09), signal] },
+            dots: { f: "dots", p: [18, 0.9, 0.15, 0.35], c: [alpha(ink, 0.11)] },
+            ribbon: { f: "ribbon", p: [2, -18, 0], c: [alpha(lime, 0.06), alpha(ink, 0.05), "#00000000"] }
+        })[bg] || null
+        Shader {
+            visible: !!look; source: look ? "shaders/" + look.f + ".metal" : ""; running: false
+            params: look ? look.p : []; colors: look ? look.c : []
+            opacity: strength; animate: 300
+        }
+        Column {
+            visible: bg === "curtain"
+            Item { grow: 1 }
+            Stack { height: 70
+                Shader { source: bg === "curtain" ? "shaders/curtain.metal" : ""; running: motion && bg === "curtain"; fps: 20; params: [5, 0, 0.25]; colors: [alpha(signal, 0.10)]
+                    opacity: strength; animate: 300 } }
+        }
+        Row {
+            visible: bg === "hatch"
+            Item { grow: 1 }
+            Column { Item { grow: 1 }
+                Stack { width: 150; height: 90
+                    Shader { source: bg === "hatch" ? "shaders/hatch.metal" : ""; running: false; params: [45, 10, 0.33, 0, 0.0, 0.9]; colors: [alpha(signal, 0.10)]; opacity: strength; animate: 300 } } }
+        }
+        Image {
+            visible: !!media && mediaKind === "image"; source: mediaKind === "image" ? media : ""; fit: "cover"
+            opacity: (1 - mediaDim) * strength; animate: 300; blur: mediaBlur
+        }
+        Video {
+            visible: !!media && mediaKind === "video"; source: mediaKind === "video" ? media : ""; fit: "cover"
+            muted: true; loop: true
+            opacity: (1 - mediaDim) * strength; animate: 300; blur: mediaBlur
+        }
+    }
+
+    property real launchNow: Date.now()
+    Timer { interval: 250; repeat: true; running: (panes.list || []).some((p) => !!launchOf(p) || quitOf(p) > 0); onTriggered: launchNow = Date.now() }
+    function quitOf(p) { return p && p.app && !p.preview && p.quitting > 0 ? p.quitting : 0 }
+    function quitFill(p) { return quitFillOf(quitOf(p)) }
+    function quitFillOf(t) { return t ? 0.05 + 0.92 * (1 - Math.exp(-Math.max(0, launchNow - t) / 4000)) : 0 }
+    function launchOf(p) {
+        const l = p && p.data && p.data.launch
+        return l && ("app" in p) && !p.app && !p.preview && Date.now() - l.at < 900000 ? l : null
+    }
+    function launchPhase(l) {
+        return !l ? "" : l.phase === "quitting" ? qsTr("Restarting Steam") : l.phase === "steam" ? qsTr("Starting Steam")
+             : l.phase === "game" ? qsTr("Starting Endfield") : qsTr("Preparing")
+    }
+    function launchTime(l, now) { const s = l ? Math.max(0, Math.floor(((now || launchNow) - l.at) / 1000)) : 0; return two(Math.floor(s / 60)) + ":" + two(s % 60) }
+    function launchFill(l, now) {
+        if (!l) return 0
+        const s = Math.max(0, ((now || launchNow) - l.at) / 1000)
+        const [from, to, secs] = l.phase === "game" ? [0.5, 0.97, 150] : l.phase === "steam" ? [0.15, 0.48, 45] : [0.03, 0.14, 20]
+        return from + (to - from) * (1 - Math.exp(-s / secs))
+    }
+
+    property int finishRun: 600
+    property int launchHold: 300
+    property int drawnWait: 30000
+    property int quitHold: 350
+    property int finishFade: 420
+    function eased(t) { return t >= 1 ? 1 : 1 - Math.pow(2, -10 * Math.max(0, t)) }
+
+    overlay: Stack {
+        property bool lit: pane.focused && many(pane) && !pane.devtools
+        property var launchCur: launchOf(pane)
+        property var launchLast: null
+        property real launchIn: 0
+        property real launchDone: 0
+        property real launchLeft: 0
+        property real quitCur: quitOf(pane)
+        property real quitLast: 0
+        property real quitDone: 0
+        property real quitLeft: 0
+        property string quitName: ""
+        property real tick: 0
+        property bool drawn: !!pane.app && (!("appDrawn" in pane) || !!pane.appDrawn)
+        function launchFinish() { tick = Date.now(); launchLeft = launchFill(launchLast, tick); launchIn = 0; launchDone = tick; }
+        onLaunchCurChanged: {
+            if (launchCur) { launchLast = launchCur; launchIn = 0; launchDone = 0; return; }
+            if (launchLast && pane.app) { tick = Date.now(); launchIn = tick; if (drawn) launchFinish(); }
+            else launchLast = null;
+        }
+        onDrawnChanged: if (drawn && launchIn) launchFinish()
+        property bool appGone: !pane.app
+        onAppGoneChanged: if (appGone && launchIn) { launchIn = 0; launchLast = null; }
+        onQuitCurChanged: {
+            if (quitCur) { quitLast = quitCur; quitDone = 0; quitName = pane.app || quitName; return; }
+            if (quitLast) { quitLeft = quitFillOf(quitLast); tick = Date.now(); quitDone = tick; }
+            quitLast = 0;
+        }
+        Timer {
+            interval: 16; repeat: true; running: launchIn > 0 || launchDone > 0 || quitDone > 0
+            onTriggered: {
+                tick = Date.now();
+                if (launchIn && tick - launchIn > drawnWait) launchFinish();
+                if (launchDone && tick - launchDone > finishRun + launchHold + finishFade) { launchDone = 0; launchLast = null; }
+                if (quitDone && tick - quitDone > finishRun + quitHold + finishFade) quitDone = 0;
+            }
+        }
+        property bool launchShown: !!launchCur || launchIn > 0 || launchDone > 0
+        property bool quitShown: quitCur > 0 || quitDone > 0
+        property real launchShownFill: launchDone ? launchLeft + (1 - launchLeft) * eased((tick - launchDone) / finishRun) : launchIn ? launchFill(launchLast, tick) : launchFill(launchCur)
+        property bool launchFading: launchDone > 0 && tick - launchDone > finishRun + launchHold
+        property bool quitFading: quitDone > 0 && tick - quitDone > finishRun + quitHold
+        property real quitShownFill: quitDone ? quitLeft + (1 - quitLeft) * eased((tick - quitDone) / finishRun) : quitFillOf(quitCur)
+        Rectangle {
+            shape: pane.shape || cut; color: "transparent"
+            border.width: lit ? 1.5 : 1; border.color: lit ? alpha(signal, 0.9) : hairline; colorAnimation: 200
+        }
+        Brackets { visible: lit; inset: 9; arm: 16; weight: 2; tint: signal; flicker: true; topLeft: false }
+        Row {
+            visible: many(pane); halign: "left"; valign: "top"; padding: 0
+            Rectangle {
+                horizontalPadding: 5; verticalPadding: 1; shape: "square, square, cut 4, square"
+                color: lit ? signal : alpha(surface, 0.85); colorAnimation: 160
+                Text { text: two(pane.index + 1); font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 8.5; color: lit ? onSignal : caption }
+            }
+        }
+        Stack {
+            opacity: pane.spotlight ? 1 : 0; animate: 180
+            Rectangle {
+                shape: pane.shape || cut; color: alpha(signal, 0.04)
+                border.width: 1.5; border.color: alpha(signal, 0.85); border.dash: [10, 6]; border.dashSpeed: motion ? 30 : 0
+            }
+            Brackets { visible: !!pane.spotlight; inset: 9; arm: 16; weight: 2; tint: signal; flicker: motion; topLeft: !many(pane) }
+            Column {
+                Item { grow: 1 }
+                Stack { height: 24; Shader { source: pane.spotlight ? "shaders/curtain.metal" : ""; running: motion && !!pane.spotlight; fps: 24; params: [4, 0, 0.5]; colors: [alpha(signal, 0.45)] } }
+            }
+        }
+        Rectangle {
+            visible: quitShown; shape: pane.shape || cut; color: surface
+            appear: motion ? "fade" : ""; appearDuration: 420
+            opacity: quitFading ? 0 : 1; opacityAnimation: finishFade
+            border.width: 1; border.color: hairline
+            Shader { source: quitShown ? "shaders/contour.metal" : ""; running: motion && quitShown; fps: 30
+                params: [11, 320, 0.012, 0.7, 0, 0.6]; colors: [alpha(ink, 0.05), alpha(signal, 0.10)] }
+            Column {
+                padding: 26
+                Row {
+                    spacing: 12; valign: "center"
+                    Band { }
+                    Text { text: "RX.LINK"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 9; font.letterSpacing: 0.6; color: primary }
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 9; color: faint }
+                    Text { text: caps(quitName); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 1.2; color: caption }
+                    Item { grow: 1 }
+                }
+                Item { grow: 1 }
+                Row {
+                    Item { grow: 1 }
+                    Column {
+                        spacing: 16; halign: "center"
+                        appear: motion ? "flicker" : ""; appearDelay: 160; appearDuration: 420
+                        Stack {
+                            visible: quitName === "Endfield"
+                            width: Math.min(320, pane.width * 0.5); height: Math.min(160, pane.height * 0.3)
+                            Image { visible: !!wordmark; source: quitShown ? wordmark : ""; fit: "contain"; opacity: 0.85 }
+                            Image { visible: !wordmark && !!logo; source: quitShown ? logo : ""; fit: "contain"; opacity: 0.85 }
+                        }
+                        Text {
+                            text: caps(qsTr("Closing %1", quitName)); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 4.5; color: inkDim
+                            scramble: motion ? 600 : 0; scrambleSet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/#"
+                        }
+                        Text { text: qsTr("cmd+q again ends it now"); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.5; color: faint }
+                    }
+                    Item { grow: 1 }
+                }
+                Item { grow: 1 }
+                Row {
+                    height: 26; valign: "center"
+                    appear: motion ? "wipe" : ""; appearDelay: 80; appearDuration: 520
+                    Rectangle { width: 36; height: 2; color: signal }
+                    Rectangle {
+                        height: 26; horizontalPadding: 14; color: signal; shape: "square, square, cut 10, square"
+                        halign: "center"; valign: "center"
+                        Row {
+                            spacing: 10; valign: "center"
+                            Text { text: caps(qsTr("Closing")); font.family: fontWide; font.width: "expanded"; font.weight: "black"; font.size: 11; font.letterSpacing: 3; color: onSignal }
+                            Rectangle { width: 1; height: 11; color: alpha(onSignal, 0.35) }
+                            Text { text: Math.floor(quitShownFill * 100) + "%"; font.family: fontNum; font.size: 12; font.weight: "bold"; font.tabular: true; color: onSignal }
+                        }
+                    }
+                    Stack {
+                        grow: 1; height: 26
+                        Column { Item { grow: 1 } Rectangle { height: 1; color: alpha(ink, 0.18) } Item { grow: 1 } }
+                        Row {
+                            Column { grow: quitShownFill; Item { grow: 1 } Rectangle { height: 2; color: signal; animate: 400; easing: "expo" } Item { grow: 1 } }
+                            Item { grow: 1 - quitShownFill }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            visible: launchShown; shape: pane.shape || cut; color: surface
+            opacity: launchFading ? 0 : 1; opacityAnimation: finishFade
+            border.width: 1; border.color: hairline
+            Shader { source: launchShown ? "shaders/contour.metal" : ""; running: motion && launchShown; fps: 30
+                params: [11, 320, 0.012, 0.7, 0, 0.6]; colors: [alpha(ink, 0.06), alpha(signal, 0.16)] }
+            Shader { source: launchShown ? "shaders/dots.metal" : ""; running: false; params: [17, 0.8, 0.2, 0.45]; colors: [alpha(ink, 0.08)] }
+            Column {
+                padding: 26
+                Row {
+                    spacing: 12; valign: "center"
+                    Band { }
+                    Text { text: "RX.LINK"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 9; font.letterSpacing: 0.6; color: primary }
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 9; color: faint }
+                    Text { text: caps(qsTr("Endfield")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 1.2; color: caption }
+                    Item { grow: 1 }
+                    Text { text: launchTime(launchCur || launchLast, launchIn ? tick : 0); font.family: fontMono; font.mono: true; font.size: 9; font.tabular: true; font.letterSpacing: 0.6; color: faint }
+                }
+                Item { grow: 1 }
+                Row {
+                    Item { grow: 1 }
+                    Column {
+                        spacing: 16; halign: "center"
+                        Stack {
+                            width: Math.min(320, pane.width * 0.5); height: Math.min(160, pane.height * 0.3)
+                            Image { visible: !!wordmark; source: launchShown ? wordmark : ""; fit: "contain" }
+                            Image { visible: !wordmark && !!logo; source: launchShown ? logo : ""; fit: "contain" }
+                            Row {
+                                visible: !wordmark && !logo
+                                Item { grow: 1 }
+                                Shader { width: 120; height: 120; source: launchShown && !wordmark && !logo ? "shaders/emblem.metal" : ""; colors: [signal, valley]; params: [0.35, 1, 1, 1.4]; running: motion && launchShown; fps: 30 }
+                                Item { grow: 1 }
+                            }
+                        }
+                        Text {
+                            text: caps(launchDone ? qsTr("Link established") : launchPhase(launchCur || launchLast)); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 4.5; color: inkDim
+                            scramble: motion ? 700 : 0; scrambleSet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/#"
+                        }
+                    }
+                    Item { grow: 1 }
+                }
+                Item { grow: 1 }
+                Row {
+                    height: 26; valign: "center"
+                    Rectangle { width: 36; height: 2; color: signal }
+                    Rectangle {
+                        height: 26; horizontalPadding: 14; color: signal; shape: "square, square, cut 10, square"
+                        halign: "center"; valign: "center"
+                        Row {
+                            spacing: 10; valign: "center"
+                            Text { text: caps(qsTr("Loading")); font.family: fontWide; font.width: "expanded"; font.weight: "black"; font.size: 11; font.letterSpacing: 3; color: onSignal }
+                            Rectangle { width: 1; height: 11; color: alpha(onSignal, 0.35) }
+                            Text { text: Math.floor(launchShownFill * 100) + "%"; font.family: fontNum; font.size: 12; font.weight: "bold"; font.tabular: true; color: onSignal }
+                        }
+                    }
+                    Stack {
+                        grow: 1; height: 26
+                        Column { Item { grow: 1 } Rectangle { height: 1; color: alpha(ink, 0.18) } Item { grow: 1 } }
+                        Row {
+                            Column { grow: launchShownFill; Item { grow: 1 } Rectangle { height: 2; color: signal; animate: 900; easing: "expo" } Item { grow: 1 } }
+                            Item { grow: 1 - launchShownFill }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

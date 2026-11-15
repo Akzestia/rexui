@@ -1,0 +1,141 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    id: dock
+    side: "top-right"; width: 340; margin: 14
+    height: Math.max(1, shown.reduce((h, n) => h + tall(n) + 8, 0))
+    color: "transparent"; resizable: false
+    title: qsTr("Notifications")
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    property var shown: []
+    property string hovered: ""
+    function brief(n) { return (n.source === "notice" || n.source === "remote") && !n.body }
+    function tall(n) { return brief(n) ? 34 : 66 }
+    function words(n) { return String(n.title || n.subtitle || qsTr("Notification")).replace(/^rex: /, "") }
+    function tint(n) {
+        if (n.tone === "error" || n.status === "error") return red
+        if (n.tone === "warning" || n.status === "blocked") return orange
+        if (n.tone === "success" || n.status === "done") return green
+        return signal
+    }
+    function hhmm(t) { const d = new Date(t || Date.now()); return two(d.getHours()) + ":" + two(d.getMinutes()) }
+    function micro(n) {
+        return ["▼ // " + caps(n.status === "blocked" ? qsTr("Needs you") : n.status === "done" ? qsTr("Done") : qsTr("Notice")), hhmm(n.time)]
+            .concat(n.tab ? ["TAB " + two(n.tab)] : []).join("  ·  ")
+    }
+    function drop(id) { shown = shown.filter((x) => x.id !== id) }
+
+    onNotice: {
+        if (!(notice.to ? notice.to === "docks" : notices.taking)) return
+        const last = shown[0]
+        const close = last && notice.time - last.time < 1500
+        if (close && notice.source === "remote" && last.source !== "remote") return
+        const rest = shown.filter((x) => x.id !== notice.id && !(close && x === last && last.source === "remote"))
+        shown = [notice].concat(rest).slice(0, 3)
+    }
+
+    Timer {
+        interval: 250; running: dock.shown.length > 0
+        onTriggered: {
+            const now = Date.now()
+            const keep = dock.shown.filter((x) => x.id === dock.hovered || now - x.time < (dock.brief(x) ? 3500 : 7000))
+            if (keep.length !== dock.shown.length) dock.shown = keep
+        }
+    }
+
+    Column {
+        List {
+            model: dock.shown
+            spacing: 8
+            gutter: 0
+            delegate: Stack {
+                height: dock.tall(modelData)
+                animate: 240; easing: "expo"
+                property bool hot: dock.hovered === modelData.id
+                Row {
+                    visible: dock.brief(modelData); halign: "right"
+                    Rectangle {
+                        height: 34; radius: 17; color: hot ? "#fdfd1f" : signal; colorAnimation: 120; horizontalPadding: 5
+                        appear: motion ? "wipe" : ""; appearDuration: 300
+                        Row {
+                            spacing: 10; height: 34
+                            Rectangle { width: 24; height: 24; radius: 12; color: onSignal; halign: "center"; valign: "center"
+                                Text { text: "!"; font.family: fontUi; font.weight: "bold"; font.size: 15; color: signal } }
+                            Text { text: dock.words(modelData); font.family: fontUi; font.size: 13; font.weight: "medium"; color: onSignal; maxLines: 1 }
+                            Text { text: "<"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 13; color: onSignal }
+                            Item { width: 4 }
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: !dock.brief(modelData)
+                    shape: cut; color: hot ? containerHigh : alpha(container, 0.96); colorAnimation: 140
+                    border.width: 1; border.color: hot ? lineHot : hairline
+                    appear: motion ? "wipe" : ""; appearDuration: 320
+                    Row {
+                        Rectangle { width: 3; height: 66; color: dock.tint(modelData) }
+                        Column {
+                            grow: 1; spacing: 3; horizontalPadding: 12; verticalPadding: 9
+                            Text { text: dock.micro(modelData); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.5; color: dock.tint(modelData) === signal ? primary : dock.tint(modelData); maxLines: 1 }
+                            Text { text: dock.words(modelData); font.family: fontUi; font.size: 14; font.weight: "medium"; color: ink; maxLines: 1 }
+                            Text { text: modelData.body || modelData.subtitle || ""; font.family: fontUi; font.size: 12; color: inkDim; maxLines: 1
+                                visible: !!(modelData.body || modelData.subtitle) }
+                        }
+                    }
+                }
+                Button {
+                    stateLayer: false
+                    onHoveredChanged: dock.hovered = hovered ? modelData.id : (dock.hovered === modelData.id ? "" : dock.hovered)
+                    onClicked: { notices.reveal(modelData.id); dock.drop(modelData.id) }
+                }
+            }
+        }
+    }
+}

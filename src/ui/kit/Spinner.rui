@@ -1,0 +1,11 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Stack {
+    id: spin
+    width: 20; height: 20
+    property bool running: true
+    property var tint: "accent"
+    property real at: 0
+    Timer { interval: 40; running: spin.running && spin.visible; onTriggered: spin.at = (spin.at + 18) % 360 }
+    Arc { value: 0.3; start: spin.at; thickness: 2.5; color: spin.tint; track: "transparent"; dot: false; gap: 0 }
+}

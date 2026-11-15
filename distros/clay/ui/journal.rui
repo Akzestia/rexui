@@ -1,0 +1,103 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "right"; width: 440
+    color: surface
+    group: "side"; title: qsTr("Journal"); icon: "book.closed.fill"; iconColor: "#788c5d"
+    key: "cmd+shift+j"
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var primary: pal[4]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+    property var glow: light ? "#f3dcc4" : "#3d2a20"
+    property var clay: "#d97757"
+
+    Process {
+        id: journal
+        command: ["clay-journal", conf.values["journal-folder"] || "~/Documents/Journal"]
+        onMessage: if (message && message.page) { day = message.page.day; shown = message.page.text; page.text = shown; }
+    }
+    property string day: ""
+    property string shown: ""
+    function save() { if (day && page.text !== shown) { shown = page.text; journal.send({ save: { day: day, text: page.text } }); } }
+    Timer { id: pause; interval: 800; repeat: false; running: false; onTriggered: { running = false; save(); } }
+
+    function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    function dateOf(s) { const p = String(s).split("-"); return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); }
+    function go(days) {
+        save();
+        const d = dateOf(day || iso(new Date()));
+        d.setDate(d.getDate() + days);
+        journal.send({ open: iso(d) });
+    }
+    property var now: new Date()
+    Timer { interval: 60000; aligned: true; onTriggered: now = new Date() }
+    property bool isToday: day === iso(now)
+    property var date: dateOf(day || iso(now))
+    function savedAt() {
+        const t = journal.state.saved;
+        if (!t) return qsTr("Not written yet");
+        const d = new Date(t * 1000);
+        return qsTr("Saved %1", String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"));
+    }
+
+    Stack {
+        grow: 1
+        Shader { source: "shaders/paper.metal"; running: false; colors: [surface, glow]; params: [0.35, 1.2, 0.5, 0] }
+        Column {
+            padding: 28; spacing: 14
+
+            Row {
+                spacing: 6
+                Text {
+                    text: date.toLocaleDateString(i18n.locale, { weekday: "long" }).toUpperCase()
+                    font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary
+                }
+                Item { grow: 1 }
+                Button { icon: "chevron.left"; font.size: 11; color: inkDim; onClicked: go(-1) }
+                Stack {
+                    Rectangle {
+                        radius: 11; horizontalPadding: 10; verticalPadding: 3; border.width: 1; border.color: isToday ? "transparent" : hairline
+                        Text { text: qsTr("Today"); font.size: 11; color: isToday ? outline : ink }
+                    }
+                    Button { stateRadius: 11; enabled: !isToday; onClicked: { save(); journal.send({ open: iso(new Date()) }); } }
+                }
+                Button { icon: "chevron.right"; font.size: 11; color: inkDim; onClicked: go(1) }
+            }
+            Text { text: date.toLocaleDateString(i18n.locale, { day: "numeric", month: "long", year: "numeric" }); font.family: "serif"; font.size: 30; color: ink }
+            Rectangle { height: 1; color: hairline }
+
+            Rectangle {
+                grow: 1; radius: 14; padding: 16
+                color: light ? "#b3f0eee6" : "#99262624"; border.width: 1; border.color: hairline
+                Stack {
+                    TextArea {
+                        id: page
+                        font.family: "serif"; font.mono: false; font.size: 16
+                        color: ink
+                        onTextChanged: if (day && text !== shown) { pause.running = false; pause.running = true; }
+                    }
+                    Text { visible: !page.text; text: qsTr("What's on your mind?"); font.family: "serif"; font.italic: true; font.size: 16; color: outline }
+                }
+            }
+
+            Rectangle { height: 1; color: hairline }
+            Row {
+                spacing: 8
+                Text { text: qsTr("%1 words", page.text.split(/\s+/).filter(Boolean).length); font.size: 11; font.tabular: true; color: inkDim }
+                Text { text: "·"; font.size: 11; color: outline }
+                Text { text: savedAt(); font.size: 11; color: outline }
+                Item { grow: 1 }
+                Text { text: journal.state.folder || ""; font.size: 11; color: outline }
+            }
+        }
+    }
+}

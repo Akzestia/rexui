@@ -1,0 +1,10 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    side: "left"; width: 260; padding: 12; spacing: 10
+    key: "cmd+shift+1"
+    Process { id: sys; command: "rexui-sys" }
+    Panel { title: qsTr("System"); Text { text: sys.state.cpu === undefined ? "CPU …" : "CPU " + Math.round(sys.state.cpu * 100) + "%" } }
+}

@@ -1,0 +1,104 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    id: dock
+    side: "top-right"; width: 320; margin: 14
+    height: Math.max(1, shown.reduce((h, n) => h + tall(n) + 8, 0))
+    color: "transparent"; resizable: false
+    title: qsTr("Notifications")
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var glass: "#f0" + pal[0].slice(1)
+    property var glassHover: "#f8" + pal[1].slice(1)
+    property var primary: pal[4]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+
+    property var shown: []
+    property var hovered: ""
+
+    function brief(n) { return (n.source === "notice" || n.source === "remote") && !n.body }
+    function tall(n) { return brief(n) ? 40 : 60 }
+    function words(n) { return String(n.title || n.subtitle || qsTr("Notification")).replace(/^rex: /, "") }
+    function tint(n) {
+        if (n.tone === "error" || n.status === "error") return "#c46686"
+        if (n.tone === "warning" || n.status === "blocked") return "#d4a27f"
+        if (n.tone === "success" || n.status === "done") return "#788c5d"
+        return primary
+    }
+    function glyph(n) {
+        if (n.symbol) return n.symbol
+        if (n.tone === "error" || n.status === "error") return "exclamationmark"
+        if (n.tone === "warning" || n.status === "blocked") return "hand.raised.fill"
+        if (n.tone === "success" || n.status === "done") return "checkmark"
+        if (/reload/i.test(n.title || "")) return "arrow.clockwise"
+        if (n.source === "terminal" || n.source === "activity") return "terminal.fill"
+        if (n.source === "remote") return "arrow.turn.down.right"
+        return "sparkle"
+    }
+    function drop(id) { shown = shown.filter((x) => x.id !== id) }
+
+    onNotice: {
+        if (!(notice.to ? notice.to === "docks" : notices.taking)) return
+        const last = shown[0]
+        const close = last && notice.time - last.time < 1500
+        if (close && notice.source === "remote" && last.source !== "remote") return
+        const rest = shown.filter((x) => x.id !== notice.id && !(close && x === last && last.source === "remote"))
+        shown = [notice].concat(rest).slice(0, 3)
+    }
+
+    Timer {
+        interval: 250; running: dock.shown.length > 0
+        onTriggered: {
+            const now = Date.now()
+            const keep = dock.shown.filter((x) => x.id === dock.hovered || now - x.time < (dock.brief(x) ? 3500 : 7000))
+            if (keep.length !== dock.shown.length) dock.shown = keep
+        }
+    }
+
+    Column {
+        List {
+            model: dock.shown
+            spacing: 8
+            gutter: 0
+            delegate: Stack {
+                height: dock.tall(modelData)
+                animate: 260; easing: "standard"
+                Rectangle {
+                    color: dock.hovered === modelData.id ? dock.glassHover : dock.glass
+                    radius: dock.brief(modelData) ? 20 : 16; border.color: dock.hairline; border.width: 1
+                    colorAnimation: 150
+                }
+                Row {
+                    horizontalPadding: dock.brief(modelData) ? 10 : 12; spacing: 10
+                    Stack {
+                        width: dock.brief(modelData) ? 22 : 30; height: dock.brief(modelData) ? 22 : 30
+                        halign: "center"; valign: "center"
+                        Rectangle { color: "#29" + dock.tint(modelData).slice(1); radius: dock.brief(modelData) ? 11 : 15 }
+                        Icon { name: dock.glyph(modelData); color: dock.tint(modelData); font.size: dock.brief(modelData) ? 10 : 13; font.bold: true }
+                    }
+                    Column {
+                        grow: 1; spacing: 1
+                        Text {
+                            text: dock.words(modelData); color: dock.ink; maxLines: 1
+                            font.family: dock.brief(modelData) ? "" : "serif"; font.size: dock.brief(modelData) ? 13 : 15
+                        }
+                        Text {
+                            text: modelData.body || modelData.subtitle || ""; color: dock.inkDim; font.size: 12; maxLines: 1
+                            visible: !dock.brief(modelData) && !!(modelData.body || modelData.subtitle)
+                        }
+                    }
+                }
+                Button {
+                    stateRadius: dock.brief(modelData) ? 20 : 16; stateLayer: false
+                    onHoveredChanged: dock.hovered = hovered ? modelData.id : (dock.hovered === modelData.id ? "" : dock.hovered)
+                    onClicked: { notices.reveal(modelData.id); dock.drop(modelData.id) }
+                }
+            }
+        }
+    }
+}

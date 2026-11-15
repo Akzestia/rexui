@@ -1,0 +1,11 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: MIT
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_library(
+    name = "backend",
+    hdrs = ["rexui_backend.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+    deps = ["//backends/include:proto"],
+)

@@ -1,0 +1,3 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+exports_files(["main.swift"])

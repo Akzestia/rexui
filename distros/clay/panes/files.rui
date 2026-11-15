@@ -1,0 +1,17 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "../ui"
+
+Dock {
+    title: qsTr("Files"); icon: "folder"
+    color: surface
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var surface: light ? "#faf9f5" : "#1f1e1d"
+
+    onFilesChanged: browser.filesChanged(path)
+    Component.onCompleted: browser.start(pane.args[0] || "")
+
+    FileBrowser { id: browser; grow: 1; room: pane.width || 1120 }
+}

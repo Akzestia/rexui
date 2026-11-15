@@ -1,0 +1,47 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+load("@apple_support//rules:universal_binary.bzl", "universal_binary")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_swift//swift:swift_library.bzl", "swift_library")
+
+cc_library(
+    name = "init",
+    srcs = [
+        "embed_init.c",
+        "rebind.c",
+    ],
+    alwayslink = True,
+    deps = ["//apps/sdk:lane"],
+)
+
+swift_library(
+    name = "embed",
+    srcs = [
+        "embed.swift",
+        "//apps/sdk:RexPane.swift",
+    ],
+    alwayslink = True,
+    module_name = "RexUIEmbed",
+)
+
+cc_binary(
+    name = "librexui-embed-thin.dylib",
+    linkshared = True,
+    deps = [
+        ":embed",
+        ":init",
+    ],
+)
+
+universal_binary(
+    name = "librexui-embed.dylib",
+    binary = ":librexui-embed-thin.dylib",
+)
+
+sh_binary(
+    name = "rexui-embed",
+    srcs = ["rexui-embed.sh"],
+    data = [":librexui-embed.dylib"],
+)

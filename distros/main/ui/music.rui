@@ -1,0 +1,173 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 320
+    group: "side"; title: qsTr("Music"); icon: "music.note"; iconColor: "#ff375f"
+    groupKey: "cmd+shift+s"
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var look: prefs.state
+    property string palette: look.palette || "caelestia"
+    property string scheme: look.scheme || "auto"
+    property bool light: scheme === "light" || (scheme === "auto" && !theme.dark)
+    Palette { id: colours; chosen: palette; lightMode: light }
+    property var pal: colours.pal
+    property var surface: pal.surface
+    property var containerHigh: pal.containerHigh
+    property var containerHighest: pal.containerHighest
+    property var primary: pal.primary
+    property var onPrimary: pal.onPrimary
+    property var secondary: pal.secondary
+    property var secondaryContainer: pal.secondaryContainer
+    property var onSecondaryContainer: pal.onSecondaryContainer
+    property var ink: pal.ink
+    property var inkDim: pal.inkDim
+    property var faint: pal.outline
+
+    Process { id: music; command: ["rexui-music"] }
+    property var s: music.state
+    property bool isPlaying: !!s.playing
+    property bool active: (s.count || 0) > 0
+    property real progress: s.duration ? Math.min(1, (s.position || 0) / s.duration) : 0
+    property real seeking: -1
+    property int current: s.index || 0
+    property real k: Math.max(0.8, Math.min(1.2, (panel.layoutWidth - 32) / 220, (panel.layoutHeight - 32) / 2 / 430))
+
+    Rectangle {
+        id: panel
+        grow: 1; radius: 16; color: surface; padding: 16; halign: "center"
+
+        Column {
+            width: Math.max(220, Math.min(420, panel.layoutWidth - 32))
+            Row {
+                spacing: 8
+                Text { text: qsTr("Music"); font.size: 15; font.weight: "bold"; color: ink }
+                Text { visible: active; text: qsTr("%1 of %2", current + 1, s.count || 0); font.size: 12; font.tabular: true; color: inkDim }
+                Item { grow: 1 }
+                Stack {
+                    Rectangle {
+                        width: 30; height: 30; radius: 15; halign: "center"; valign: "center"; colorAnimation: 160
+                        color: s.shuffle ? secondaryContainer : "transparent"
+                        Icon { name: "shuffle"; font.size: 13; color: s.shuffle ? onSecondaryContainer : inkDim }
+                    }
+                    Button { stateRadius: 15; tip: qsTr("Shuffle"); onClicked: music.send({ cmd: "shuffle" }) }
+                }
+            }
+            Item { height: 10 * k }
+
+            Column {
+                halign: "center"
+                Stack {
+                    width: 172 * k; height: 172 * k
+                    Arc {
+                        value: seeking >= 0 ? seeking : progress; start: -180; sweep: 180; thickness: 6 * k; gap: 8 * k
+                        wavy: true; waves: 8; waving: isPlaying
+                        color: primary; track: secondaryContainer
+                        seekable: s.duration > 0
+                        onMoved: seeking = value
+                        onReleased: { music.send({ seek: value * s.duration }); seeking = -1; }
+                    }
+                    Rectangle {
+                        halign: "center"; valign: "center"
+                        Stack {
+                            width: 132 * k; height: 132 * k
+                            Image { source: s.artwork || ""; shape: "cookie12"; spin: isPlaying ? 23500 : 0; color: containerHighest }
+                            Icon { name: "music.note"; font.size: 44 * k; color: inkDim; visible: !s.artwork }
+                        }
+                    }
+                }
+                Item { height: 14 * k }
+                Text {
+                    width: 220 * k; align: "center"; font.size: 15 * k; font.weight: "medium"; color: primary
+                    text: active ? s.title || qsTr("Unknown title") : qsTr("No media")
+                }
+                Item { height: 4 * k }
+                Text { width: 220 * k; align: "center"; font.size: 12 * k; color: faint; text: active ? s.album || qsTr("Unknown album") : qsTr("No media") }
+                Item { height: 3 * k }
+                Text { width: 220 * k; align: "center"; font.size: 13 * k; color: secondary; text: active ? s.artist || qsTr("Unknown artist") : qsTr("No media") }
+                Item { height: 16 * k }
+                Row {
+                    spacing: 12 * k
+                    Stack {
+                        Rectangle {
+                            width: 44 * k; height: 44 * k; radius: 22 * k; color: secondaryContainer; halign: "center"; valign: "center"
+                            Icon { name: "backward.fill"; font.size: 15 * k; color: active ? onSecondaryContainer : faint }
+                        }
+                        Button { enabled: active; stateRadius: 22 * k; onClicked: music.send({ cmd: "previous" }) }
+                    }
+                    Stack {
+                        Rectangle {
+                            width: 76 * k; height: 52 * k; radius: (isPlaying ? 16 : 26) * k; color: primary; halign: "center"; valign: "center"; animate: 200
+                            Icon { name: isPlaying ? "pause.fill" : "play.fill"; font.size: 19 * k; color: onPrimary }
+                        }
+                        Button { enabled: active; stateRadius: 26 * k; onClicked: music.send({ cmd: "toggle" }) }
+                    }
+                    Stack {
+                        Rectangle {
+                            width: 44 * k; height: 44 * k; radius: 22 * k; color: secondaryContainer; halign: "center"; valign: "center"
+                            Icon { name: "forward.fill"; font.size: 15 * k; color: active ? onSecondaryContainer : faint }
+                        }
+                        Button { enabled: active; stateRadius: 22 * k; onClicked: music.send({ cmd: "next" }) }
+                    }
+                }
+            }
+            Item { height: 18 * k }
+
+            Row {
+                spacing: 8; horizontalPadding: 2
+                Text { text: qsTr("Library"); font.size: 13; font.weight: "semibold"; color: ink }
+                Item { grow: 1 }
+                Image { visible: active; source: "assets/bongocat.gif"; width: 44; height: 28; fit: "contain"; playing: isPlaying; speed: 0.4 }
+            }
+            Item { height: 6 }
+            Stack {
+                grow: 1
+                List {
+                    spacing: 2; fade: 0.03
+                    reveal: current; revealAnimation: 240
+                    model: s.tracks || []
+                    delegate: Stack {
+                        Rectangle {
+                            radius: 10; horizontalPadding: 10; verticalPadding: 7; colorAnimation: 140
+                            color: index === current ? containerHigh : "transparent"
+                            Row {
+                                spacing: 10
+                                Stack {
+                                    width: 22
+                                    Text { visible: !(index === current && isPlaying); text: String(index + 1); align: "center"; font.size: 11; font.tabular: true; color: index === current ? primary : faint }
+                                    Icon { visible: index === current && isPlaying; name: "waveform"; font.size: 12; color: primary }
+                                }
+                                Column {
+                                    grow: 1; spacing: 1
+                                    Text { text: modelData.title || ""; font.size: 13; font.weight: index === current ? "semibold" : "regular"; color: index === current ? primary : ink }
+                                    Text { visible: !!modelData.artist; text: modelData.artist || ""; font.size: 11; color: inkDim }
+                                }
+                            }
+                        }
+                        Button { stateRadius: 10; onClicked: music.send({ play: index }) }
+                    }
+                }
+                Column {
+                    visible: !active
+                    halign: "center"; valign: "center"; spacing: 6
+                    Icon { name: "music.note.list"; font.size: 26; color: faint }
+                    Text {
+                        width: 220; align: "center"; wrap: true; font.size: 12; color: inkDim
+                        text: qsTr("Audio files in %1 play here: mp3, m4a, flac, wav and aiff.", s.folder || "~/Music")
+                    }
+                }
+            }
+            Item { height: 10 }
+
+            Row {
+                spacing: 10; horizontalPadding: 2
+                Icon { name: (s.volume ?? 1) === 0 ? "speaker.slash.fill" : (s.volume ?? 1) < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.2.fill"; font.size: 12; color: inkDim; width: 18 }
+                Slider {
+                    grow: 1; value: s.volume ?? 1
+                    color: primary; trackColor: containerHighest; knobColor: primary
+                    onMoved: music.send({ volume: value })
+                }
+            }
+        }
+    }
+}

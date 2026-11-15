@@ -1,0 +1,127 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    title: "System"; icon: "gauge.with.dots.needle.67percent"
+    padding: 28; halign: "center"; valign: "center"
+    color: surface
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var colors: prefs.state.colors
+    property bool light: colors ? !!colors.light : !theme.dark
+    property var rose: (light ? "fff8f8 faeaed f4e4e7 efdfe2 8b4a62 ffffff ffd9e3 6f334a 74565f ffffff ffd9e3 5a3f48 7d5636 4e6355 22191c 514347 837377 d5c2c6"
+                              : "191114 261d20 31282a 3c3235 ffb0ca 541d34 6f334a ffd9e3 e2bdc7 422932 5a3f48 ffd9e3 f0bc95 b5ccba efdfe2 d5c2c6 9e8c91 514347").split(" ").map((c) => "#" + c)
+    property var pal: colors ? ["surface", "container", "containerHigh", "containerHighest", "primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "success", "ink", "inkDim", "outline", "outlineVariant"].map((k) => colors[k]) : rose
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var primary: pal[4]
+    property var secondary: pal[8]
+    property var secondaryContainer: pal[10]
+    property var tertiary: pal[12]
+    property var success: pal[13]
+    property var ink: pal[14]
+    property var inkDim: pal[15]
+    property var outline: pal[16]
+
+    Process {
+        id: sys; command: "rexui-sys"
+        onMessage: if (message && message.state && message.state.cpu !== undefined) history = history.slice(-59).concat([message.state.cpu])
+    }
+    property var s: sys.state
+    property var history: []
+
+    function pct(v) { return Math.round((v || 0) * 100) + "%"; }
+    function gb(b) { return ((b || 0) / 1e9).toFixed(1); }
+    function rate(b) {
+        b = b || 0;
+        return b >= 1e6 ? (b / 1e6).toFixed(1) + " MB/s" : b >= 1e3 ? Math.round(b / 1e3) + " KB/s" : Math.round(b) + " B/s";
+    }
+    property var rings: [
+        { name: "CPU", value: s.cpu || 0, detail: (s.cores || 0) + " cores", color: primary, icon: "cpu" },
+        { name: "Memory", value: s.mem || 0, detail: gb(s.memUsed) + " / " + gb(s.memTotal) + " GB", color: secondary, icon: "memorychip" },
+        { name: "Disk", value: s.disk || 0, detail: gb(s.diskUsed) + " / " + gb(s.diskTotal) + " GB", color: tertiary, icon: "internaldrive" }
+    ]
+
+    Column {
+        spacing: 18; halign: "center"
+        Row {
+            spacing: 18
+            Grid {
+                columns: 3; spacing: 18
+                model: rings
+                delegate: Rectangle {
+                    width: 180; radius: 28; color: container; padding: 16
+                    Column {
+                        spacing: 10; halign: "center"
+                        Stack {
+                            width: 132; height: 132; halign: "center"; valign: "center"
+                            Arc {
+                                value: modelData.value; start: 135; sweep: 270; thickness: 10; gap: 10
+                                wavy: modelData.value > 0.5; waves: 10; waving: modelData.value > 0.5
+                                color: modelData.color; track: secondaryContainer
+                            }
+                            Column {
+                                spacing: 2; halign: "center"
+                                Icon { name: modelData.icon; font.size: 16; color: modelData.color }
+                                Text { text: pct(modelData.value); font.size: 26; font.weight: "semibold"; color: ink }
+                            }
+                        }
+                        Text { text: modelData.name; font.size: 14; font.weight: "medium"; color: ink }
+                        Text { text: modelData.detail; font.size: 11; color: inkDim }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 576; radius: 24; color: container; padding: 16
+            Column {
+                spacing: 10
+                Row {
+                    Text { text: "CPU · 60 s"; font.size: 12; font.weight: "medium"; color: inkDim }
+                    Item { grow: 1 }
+                    Text { text: "load " + (s.load || 0).toFixed(2); font.size: 12; font.mono: true; color: inkDim }
+                }
+                Grid {
+                    columns: 60; spacing: 3
+                    model: 60
+                    delegate: Stack {
+                        width: 6; height: 64; valign: "bottom"
+                        Rectangle {
+                            property real v: history.length > 59 - index ? history[history.length - 60 + index] : 0
+                            height: Math.max(3, v * 64); radius: 3; animate: 400; easing: "standard"
+                            color: v > 0.75 ? tertiary : v > 0.4 ? secondary : primary
+                            opacity: history.length > 59 - index ? 1 : 0.25
+                        }
+                    }
+                }
+            }
+        }
+        Row {
+            spacing: 18
+            Rectangle {
+                width: 279; radius: 20; color: container; horizontalPadding: 16; verticalPadding: 12
+                Row {
+                    spacing: 14
+                    Icon { name: "arrow.down"; font.size: 16; font.bold: true; color: primary }
+                    Text { width: 84; text: rate(s.netIn); font.size: 13; font.mono: true; color: ink }
+                    Icon { name: "arrow.up"; font.size: 16; font.bold: true; color: secondary }
+                    Text { width: 84; text: rate(s.netOut); font.size: 13; font.mono: true; color: ink }
+                }
+            }
+            Rectangle {
+                width: 279; radius: 20; color: container; horizontalPadding: 16; verticalPadding: 12
+                Row {
+                    spacing: 10
+                    Icon {
+                        name: s.battery < 0 ? "powerplug.fill" : s.charging ? "battery.100.bolt" :
+                              s.battery > 0.75 ? "battery.100" : s.battery > 0.5 ? "battery.75" : s.battery > 0.25 ? "battery.50" : "battery.25"
+                        font.size: 18; color: s.battery >= 0 && s.battery < 0.2 && !s.charging ? tertiary : success
+                    }
+                    Text { text: s.battery >= 0 ? pct(s.battery) + (s.charging ? " · charging" : "") : "on power"; font.size: 13; color: ink }
+                    Item { grow: 1 }
+                    Text { text: s.uptime ? "up " + Math.floor(s.uptime / 86400) + "d " + Math.floor(s.uptime % 86400 / 3600) + "h" : ""; font.size: 12; color: inkDim }
+                }
+            }
+        }
+    }
+}

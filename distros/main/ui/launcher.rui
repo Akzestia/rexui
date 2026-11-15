@@ -1,0 +1,198 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "top"; height: 0; span: "window"; resizable: false
+
+    Process { id: apps; command: "rexui-launch"; onMessage: { if (message && message.error) problem = message.error; } }
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property string palette: prefs.state.palette || "caelestia"
+    property string scheme: prefs.state.scheme || "auto"
+    property bool light: scheme === "light" || (scheme === "auto" && !theme.dark)
+    Palette { id: colours; chosen: palette; lightMode: light }
+    property var pal: colours.pal
+    property var surface: pal.surface
+    property var container: pal.container
+    property var containerHigh: pal.containerHigh
+    property var containerHighest: pal.containerHighest
+    property var primary: pal.primary
+    property var onPrimary: pal.onPrimary
+    property var primaryContainer: pal.primaryContainer
+    property var onPrimaryContainer: pal.onPrimaryContainer
+    property var secondary: pal.secondary
+    property var onSecondary: pal.onSecondary
+    property var secondaryContainer: pal.secondaryContainer
+    property var onSecondaryContainer: pal.onSecondaryContainer
+    property var tertiary: pal.tertiary
+    property var success: pal.success
+    property var ink: pal.ink
+    property var inkDim: pal.inkDim
+    property var outline: pal.outline
+    property var outlineVariant: pal.outlineVariant
+
+    property bool shown: false
+    property string query: ""
+    property int picked: 0
+    property var target: null
+    property string problem: ""
+    property var running: (apps.state.running || []).map((r) => r.id)
+    function short(t, n) { return t.length > n ? t.slice(0, n - 1) + "…" : t; }
+    function where(id) {
+        const all = (apps.state.running || []).filter((r) => r.id === id), r = all[0];
+        if (!r) return "";
+        if (!r.tab) return qsTr("Running");
+        const title = (r.sessionId === rex.sessionId && rex.titles[r.tab - 1]) || r.tabLabel || qsTr("Tab %1", r.tab);
+        return short(r.session || "", 18) + "  ›  " + short(title, 22) + (all.length > 1 ? "  +" + (all.length - 1) : "");
+    }
+    property var items: shown ? find(apps.state.apps || [], apps.state.recent || [], query) : []
+    property int count: items.filter((it) => !it.header).length
+
+    function score(text, q) {
+        if (!q) return 1;
+        const t = (text || "").toLowerCase(), at = t.indexOf(q);
+        if (at === 0) return 100;
+        if (at > 0) return " .-_:".includes(t[at - 1]) ? 80 : 60;
+        let from = 0, last = -1, gaps = 0;
+        for (const c of q) {
+            if (c === " ") continue;
+            const k = t.indexOf(c, from);
+            if (k < 0) return 0;
+            if (last >= 0) gaps += k - last - 1;
+            last = k;
+            from = k + 1;
+        }
+        return Math.max(1, 40 - gaps);
+    }
+    function find(all, recent, q) {
+        q = q.trim().toLowerCase();
+        if (!q) {
+            const mine = recent.map((id) => all.find((a) => a.id === id)).filter((a) => a);
+            const rest = all.filter((a) => !recent.includes(a.id));
+            const apps = rest.filter((a) => a.kind !== "widget"), widgets = rest.filter((a) => a.kind === "widget");
+            const out = mine.length ? [{ header: qsTr("Recent") }].concat(mine) : [];
+            if (apps.length) out.push(...(out.length || widgets.length ? [{ header: qsTr("Applications") }] : []), ...apps);
+            if (widgets.length) out.push({ header: qsTr("Widgets") }, ...widgets);
+            return out;
+        }
+        const scored = [];
+        for (const a of all) {
+            const s = Math.max(score(a.name, q), score(a.subtitle, q) * 0.3);
+            const seen = recent.indexOf(a.id);
+            if (s > 0) scored.push([s + (seen >= 0 ? 5 - seen * 0.5 : 0), a]);
+        }
+        scored.sort((x, y) => y[0] - x[0] || x[1].name.localeCompare(y[1].name));
+        return scored.map((p) => p[1]);
+    }
+    function first() { const i = items.findIndex((it) => !it.header); return i < 0 ? 0 : i; }
+    function move(d) {
+        const n = items.length;
+        if (!count) return;
+        let i = picked;
+        do i = (i + (d === "up" ? -1 : 1) + n) % n; while (items[i].header);
+        picked = i;
+    }
+    function launch(it) {
+        if (!it || it.header) return;
+        apps.send({ launch: { id: it.id, block: target ? target.block : "", session: target ? target.session : rex.sessionId } });
+        launcher.open = false;
+    }
+
+    Drawer {
+        id: launcher
+        lazy: true
+        placement: "top"; rounding: 22; color: surface; animation: 300
+        width: 620; padding: 8; spacing: 6; resizable: false
+        key: "cmd+shift+a"
+        onOpenChanged: {
+            if (!open) { shown = false; return; }
+            target = rex.block();
+            problem = "";
+            field.text = ""; query = "";
+            apps.send({ refresh: true });
+            shown = true;
+            picked = first();
+        }
+
+        Rectangle {
+            radius: 15; color: containerHigh; horizontalPadding: 14; verticalPadding: 10
+            Row {
+                spacing: 10
+                Icon { name: "magnifyingglass"; font.size: 15; color: primary }
+                TextField {
+                    id: field
+                    grow: 1; font.size: 16; color: ink
+                    placeholder: qsTr("Open an app or a widget in this pane…")
+                    autofocus: true; arrows: true
+                    onTextChanged: { query = text; picked = first(); }
+                    onAccepted: launch(items[picked])
+                    onCancelled: launcher.open = false
+                    onArrow: move(direction)
+                }
+            }
+        }
+        List {
+            visible: items.length > 0
+            spacing: 2; maxHeight: 420; fade: 0.04
+            reveal: shown ? picked : -1; revealAnimation: 180
+            model: items
+            delegate: Stack {
+                Item {
+                    visible: !!modelData.header; horizontalPadding: 12; verticalPadding: 4
+                    Text { text: modelData.header || ""; font.size: 11; font.weight: "semibold"; color: inkDim }
+                }
+                Rectangle {
+                    visible: !modelData.header
+                    radius: 13; horizontalPadding: 10; verticalPadding: 7
+                    color: index === picked ? secondaryContainer : "transparent"; colorAnimation: 140
+                    Row {
+                        spacing: 12; valign: "center"
+                        Stack {
+                            width: 32; height: 32
+                            Image { visible: !!modelData.icon; source: modelData.icon || ""; fit: "contain"; width: 32; height: 32 }
+                            Rectangle {
+                                visible: !modelData.icon; radius: 9; width: 32; height: 32; halign: "center"; valign: "center"
+                                color: index === picked ? surface : containerHighest
+                                Icon { name: modelData.symbol || "app"; font.size: 15; color: primary }
+                            }
+                        }
+                        Column {
+                            spacing: 1
+                            Row {
+                                spacing: 6
+                                Text { text: modelData.name || ""; font.size: 14; font.weight: "medium"; color: index === picked ? onSecondaryContainer : ink }
+                                Rectangle {
+                                    visible: modelData.kind === "widget" && (!!query.trim() || (apps.state.recent || []).includes(modelData.id))
+                                    radius: 6; horizontalPadding: 6; verticalPadding: 1; color: index === picked ? surface : containerHighest
+                                    Text { text: qsTr("Widget"); font.size: 9; font.weight: "medium"; color: tertiary }
+                                }
+                            }
+                            Text { visible: !!modelData.subtitle; text: modelData.subtitle || ""; font.size: 11; color: index === picked ? onSecondaryContainer : inkDim; opacity: 0.8 }
+                        }
+                        Item { grow: 1 }
+                        Text { visible: running.includes(modelData.id); text: where(modelData.id); font.size: 11; color: index === picked ? onSecondaryContainer : inkDim }
+                        Text {
+                            text: "↩"; font.size: 13; color: onSecondaryContainer
+                            opacity: index === picked ? 1 : 0; animate: 140
+                        }
+                    }
+                }
+                Button { visible: !modelData.header; onClicked: launch(modelData) }
+            }
+        }
+        Item {
+            visible: shown && items.length === 0; horizontalPadding: 12; verticalPadding: 8
+            Text { text: apps.state.apps ? qsTr("Nothing matches “%1”.", query) : qsTr("Looking for apps…"); font.size: 12; color: inkDim }
+        }
+        Item {
+            visible: !!problem; horizontalPadding: 12; verticalPadding: 2
+            Text { text: problem; font.size: 11; color: tertiary; wrap: true }
+        }
+        Row {
+            horizontalPadding: 12; spacing: 12
+            Text { text: qsTr("↑↓ choose"); font.size: 10; color: outline }
+            Text { text: qsTr("↩ open in the last pane"); font.size: 10; color: outline }
+            Text { text: qsTr("esc close"); font.size: 10; color: outline }
+            Item { grow: 1 }
+            Text { visible: count > 0; text: qsTr(count === 1 ? "%1 result" : "%1 results", count); font.size: 10; color: outline }
+        }
+    }
+}

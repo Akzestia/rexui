@@ -1,0 +1,410 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    side: "right"; width: 360; group: "side"
+    key: "cmd+shift+o"; title: qsTr("Account"); icon: "person.text.rectangle.fill"
+    color: surface; padding: 18; spacing: 16
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    iconColor: signal
+    iconInk: ink
+
+    property bool demo: conf.values["skport-demo"] === "true"
+    Process { id: skport; command: ["endfield-skport", demo ? "demo" : conf.values["skport-browser"] || "zen", String(conf.values["skport-every"] || 5), "~/.config/rex/distros/endfield/assets/skport"] }
+    property var sk: skport.state || ({})
+    onSkChanged: shared.set("skport", sk)
+    property bool ok: sk.status === "ok"
+    property var role: sk.role || ({})
+    property var san: sk.sanity || ({})
+    property real now: Date.now()
+    Timer { interval: 30000; onTriggered: now = Date.now() }
+    property string picked: ""
+    property string opsJson: JSON.stringify(sk.operators || [])
+    property var ops: JSON.parse(opsJson)
+    property string daysJson: JSON.stringify(sk.checkin ? sk.checkin.days || [] : [])
+    property var days: JSON.parse(daysJson)
+    property string regionsJson: JSON.stringify(sk.regions || [])
+    property var regions: JSON.parse(regionsJson)
+    property string bannersJson: JSON.stringify(sk.banners || [])
+    property var bannerList: JSON.parse(bannersJson)
+
+    function sanityNow() {
+        if (!san.max) return 0
+        if (!san.fullAt || now >= san.fullAt) return Math.max(san.cur || 0, san.max)
+        if (!san.perPoint) return san.cur || 0
+        return Math.max(san.cur || 0, san.max - Math.ceil((san.fullAt - now) / san.perPoint))
+    }
+    function leftTill(t) {
+        const m = Math.max(0, Math.round((t - now) / 60000))
+        return m >= 1440 ? qsTr("%1d %2h", Math.floor(m / 1440), Math.floor(m % 1440 / 60)) : m >= 60 ? qsTr("%1h %2m", Math.floor(m / 60), m % 60) : qsTr("%1m", m)
+    }
+    function hm(t) { const d = new Date(t); return two(d.getHours()) + ":" + two(d.getMinutes()) }
+    function rareTint(n) { return n >= 6 ? "#fc6c00" : n === 5 ? "#fcba00" : n === 4 ? "#904ef6" : "#24bafc" }
+    property var rarityCounts: [6, 5, 4, 3].map((r) => [r, ops.filter((o) => o.rarity === r).length]).filter((x) => x[1])
+    property int pickedIndex: (sk.operators || []).findIndex((o) => o.id === picked)
+    property var pickedOp: pickedIndex >= 0 ? sk.operators[pickedIndex] : null
+    property var fileOp: null
+    onPickedOpChanged: if (pickedOp) fileOp = pickedOp
+    property int fileIndex: fileOp ? ops.findIndex((o) => o.id === fileOp.id) : -1
+    property bool fileMoving: false
+    onPickedChanged: fileMoving = true
+    Timer { interval: 450; repeat: false; running: fileMoving; onTriggered: fileMoving = false }
+    property var pickAsk: shared.values.skportPick || null
+    onPickAskChanged: if (pickAsk && pickAsk.id) picked = pickAsk.id
+    function classIcon(c) { return ({ Guard: "figure.fencing", Defender: "shield.lefthalf.filled", Vanguard: "flag.fill", Caster: "wand.and.stars", Striker: "burst.fill", Supporter: "cross.case.fill" })[c] || "person.fill"; }
+    function elementIcon(e) { return ({ Heat: "flame.fill", Electric: "bolt.fill", Cryo: "snowflake", Nature: "leaf.fill", Physical: "circle.hexagongrid.fill" })[e] || "circle.fill"; }
+    function elementTint(e) { return ({ Heat: "#ff5a2a", Electric: "#e9b80c", Cryo: "#3fb6e8", Nature: "#6fb83c", Physical: "#8f9298" })[e] || "#8f9298"; }
+    property int levelCap: pickedOp ? [20, 40, 60, 80, 90][Math.min(4, pickedOp.promotion || 0)] : 20
+    property real levelFrac: pickedOp ? Math.max(0, Math.min(1, pickedOp.level / levelCap)) : 0
+    function levelCells(from, to) {
+        let d = "";
+        for (let i = from; i < to; i++) {
+            const c = i % 8, r = Math.floor(i / 8), x = c / 8, y = r / 5 * 0.78, w = 1 / 8 * 0.78, h = 0.78 / 5 * 0.78;
+            d += "M" + x.toFixed(4) + " " + y.toFixed(4) + " H" + (x + w).toFixed(4) + " V" + (y + h).toFixed(4) + " H" + x.toFixed(4) + " Z ";
+        }
+        return d;
+    }
+    function diamonds(from, to) {
+        let d = "";
+        for (let i = from; i < to; i++) { const c = (i + 0.5) / 4, w = 0.4 / 4; d += "M" + c.toFixed(4) + " 0 L" + (c + w).toFixed(4) + " 0.5 L" + c.toFixed(4) + " 1 L" + (c - w).toFixed(4) + " 0.5 Z "; }
+        return d;
+    }
+    function opLine(o) { return [o.class, o.element, o.weaponType].filter((x) => x).map(caps).join("  ·  ") }
+    function weaponLine(w) { return w ? caps(w.name) + "  ·  LV " + w.level + (w.refine ? "  ·  P" + w.refine : "") : qsTr("No weapon") }
+    function skillLine(s) { return s.max ? s.level + "/" + s.max : String(s.level || "") }
+    function regionLine(r) { return (r.settlements || []).map((s) => s.name + " " + s.level).join("  ·  ") }
+    function blocked() {
+        return sk.status === "nologin" ? qsTr("Log in at game.skport.com in your browser (%1): the Account reads SKPort with that login.", conf.values["skport-browser"] || "zen")
+             : sk.status === "unlinked" ? qsTr("SKPort has your account but no character yet. Finish the tutorial, then open game.skport.com/endfield/sign-in once to link it.")
+             : sk.status === "error" ? qsTr("SKPort didn't answer for your character. It's read again in a few minutes.")
+             : qsTr("Reading SKPort…")
+    }
+
+    Heading {
+        code: qsTr("Account"); index: "04"; size: 22
+        title: ok ? role.name : (sk.account && sk.account.name) || qsTr("Endministrator")
+        sub: ok ? caps(qsTr("Authority %1", role.level)) + "  ·  " + caps(qsTr("World %1", role.worldLevel)) + "  ·  " + caps(role.server || "")
+                : caps(qsTr("SKPort")) + "  ·  " + caps(sk.status === "loading" || !sk.status ? qsTr("Reading") : qsTr("No character"))
+    }
+
+    Stack {
+        expanded: !!pickedOp; collapse: true; animate: motion ? 340 : 0; easing: "expo"
+        Rectangle { shape: cutLarge; color: container; border.width: 1; border.color: hairline }
+        Column {
+            padding: 16; spacing: 14
+            SecHead { index: "OP." + (fileOp ? two(fileIndex + 1) : "00"); title: qsTr("Operator file"); meta: fileOp ? two(fileIndex + 1) + " / " + two(ops.length) : ""
+                Item { width: 8 }
+                Close { onClicked: picked = "" } }
+            Row {
+                spacing: 0; valign: "stretch"
+                Column {
+                    width: 330
+                    Stack {
+                        grow: 1
+                        Shader { source: "shaders/card.metal"; running: false; params: [0, 0.9, 0, 0]; colors: [fileOp ? rareTint(fileOp.rarity) : hairline, well, "#ffffff"] }
+                        Shader { source: "shaders/contour.metal"; running: motion && !!pickedOp; fps: 24; params: [12, 170, 0.015, 0.6, 0, 0.5]; colors: [alpha(fileOp ? rareTint(fileOp.rarity) : ink, 0.16), alpha(signal, 0.3)] }
+                        Image { visible: !!fileOp && !!fileOp.art; source: fileOp ? fileOp.art : ""; fit: "contain"; appear: motion ? "fade" : ""; appearDelay: 120 }
+                        Brackets { tint: alpha(signal, 0.6); arm: 16; inset: 10; flicker: true }
+                        Column { padding: 18
+                            Item { grow: 1 }
+                            Text { text: fileOp ? caps(qsTr("Since %1", new Date(fileOp.owned).toLocaleDateString(i18n.locale, { year: "numeric", month: "short", day: "numeric" }))) : ""; font.family: fontMono; font.mono: true; font.size: 9.5; font.letterSpacing: 0.4; color: inkDim } }
+                    }
+                    Rectangle { height: 3; color: fileOp ? rareTint(fileOp.rarity) : hairline }
+                }
+                Rectangle {
+                    grow: 1; color: "#e9e9e7"; shape: "square, cut 14, square, square"
+                    Shader { source: "shaders/dots.metal"; running: false; params: [14, 0.7, 0, 0.6]; colors: ["#1a141519"] }
+                    Column {
+                        padding: 18; spacing: 14
+                        Row {
+                            spacing: 14; valign: "center"
+                            Stack { width: 60; height: 60
+                                Rectangle { color: "#26ffffff"; border.width: 2; border.color: "#3a3b3f" }
+                                Column { halign: "center"; valign: "center"; Icon { name: classIcon(fileOp ? fileOp.class : ""); font.size: 28; color: "#2a2b2e" } } }
+                            Column { grow: 1; spacing: 6
+                                Text { text: fileOp ? fileOp.name : ""; font.family: fontUi; font.size: 30; font.weight: "medium"; color: "#141519"; maxLines: 1; scramble: motion ? 420 : 0 }
+                                Row { spacing: 10; valign: "center"
+                                    Rectangle { width: 24; height: 24; color: fileOp ? elementTint(fileOp.element) : caption; halign: "center"; valign: "center"
+                                        Icon { name: elementIcon(fileOp ? fileOp.element : ""); font.size: 13; color: "#ffffff" } }
+                                    Stars { count: fileOp ? fileOp.rarity : 0; size: 20; tint: "#3a3b3f" }
+                                    Text { text: fileOp ? caps(fileOp.class + "  ·  " + fileOp.weaponType) : ""; font.family: fontMono; font.mono: true; font.size: 9.5; font.letterSpacing: 0.4; color: "#55575f"; maxLines: 1 } }
+                            }
+                        }
+                        Row {
+                            spacing: 16; valign: "stretch"
+                            Stack {
+                                width: 150; height: 108
+                                Path { d: levelCells(0, 40); fill: "#1f141519"; stroke: "transparent"; strokeWidth: 0 }
+                                Path { d: levelCells(0, Math.round(levelFrac * 40)); fill: "#f2c200"; stroke: "transparent"; strokeWidth: 0 }
+                                Column { padding: 4; spacing: -8
+                                    Text { text: fileOp ? String(fileOp.level) : "--"; font.family: fontNum; font.weight: "bold"; font.size: 72; font.tabular: true; color: "#2a2b2e"
+                                        scramble: motion ? 500 : 0; scrambleSet: "0123456789" }
+                                    Item { grow: 1 }
+                                    Text { text: "LEVEL/" + levelCap; font.family: fontUi; font.weight: "bold"; font.size: 15; color: "#2a2b2e" } }
+                            }
+                            Rectangle { width: 1; color: "#33141519" }
+                            Column { grow: 1; spacing: 8
+                                Row { spacing: 10; valign: "center"
+                                    Column { spacing: 2
+                                        Text { text: qsTr("Elite"); font.family: fontUi; font.size: 19; font.weight: "bold"; color: "#3a3b3f" }
+                                        Rectangle { color: "#3a3b3f"; horizontalPadding: 4; verticalPadding: 1
+                                            Text { text: caps(qsTr("Promotion")); font.family: fontWide; font.width: "expanded"; font.size: 6.5; font.weight: "semibold"; color: "#e9e9e7" } }
+                                        Item { height: 6 }
+                                        Stack { width: 64; height: 12
+                                            Path { d: diamonds(0, 4); fill: "#33141519"; stroke: "transparent"; strokeWidth: 0 }
+                                            Path { d: diamonds(0, fileOp ? Math.min(4, fileOp.promotion) : 0); fill: "#2a2b2e"; stroke: "transparent"; strokeWidth: 0 } }
+                                    }
+                                    Item { grow: 1 }
+                                    Column { spacing: 3; halign: "center"
+                                        Potential { value: fileOp ? fileOp.potential : 0; size: 62; tint: "#2a2b2e"; line: "#3a3b3f"; lineWidth: 1.6 }
+                                        Text { text: caps(qsTr("Potential")) + "  " + (fileOp ? fileOp.potential : 0) + "/5"; align: "center"; font.family: fontWide; font.width: "expanded"; font.size: 7.5; font.weight: "semibold"; font.letterSpacing: 0.8; color: "#55575f" } }
+                                }
+                            }
+                        }
+                        Stack { height: 2
+                            Rectangle { color: "#26141519" }
+                            Row { Rectangle { grow: Math.max(0.0001, levelFrac); height: 2; color: "#f2c200" }; Item { grow: 1 - levelFrac } } }
+                        Grid {
+                            visible: !!fileOp && (fileOp.tags || []).length > 0; columns: 3; spacing: 5
+                            model: fileOp ? fileOp.tags || [] : []
+                            delegate: Rectangle { radius: 4; color: "#a6ffffff"; verticalPadding: 5; halign: "center"
+                                Text { text: modelData; align: "center"; font.family: fontUi; font.size: 13; font.weight: "medium"; color: "#2a2b2e"; maxLines: 1 } }
+                        }
+                        Row { spacing: 10; valign: "center"
+                            Text { text: qsTr("Skills"); font.family: fontUi; font.size: 16; font.weight: "bold"; color: "#3a3b3f" }
+                            Rectangle { grow: 1; height: 6; color: "#8cffffff" } }
+                        Grid {
+                            columns: 4; spacing: 6
+                            model: fileOp ? fileOp.skills || [] : []
+                            delegate: Column {
+                                spacing: 5; halign: "center"
+                                tip: modelData.name + "  ·  " + modelData.type
+                                Stack { width: 58; height: 58
+                                    Arc { value: 1; start: -90; sweep: 360; thickness: 2; gap: 0; dot: false; color: "#bfffffff"; track: "#00000000" }
+                                    Column { padding: 4
+                                        Rectangle { radius: 25; color: String(modelData.type).toLowerCase().includes("ultimate") ? elementTint(modelData.element || fileOp.element) : "#4a4b50"
+                                            Column { padding: 9; Image { source: modelData.icon; height: 32; fit: "contain" } } } }
+                                }
+                                Rectangle { radius: 8; color: "#3a3b3f"; horizontalPadding: 7; verticalPadding: 1
+                                    Text { text: caps(qsTr("Rank %1", modelData.level || 1)); font.family: fontUi; font.size: 9.5; font.weight: "bold"; color: "#ffffff" } }
+                            }
+                        }
+                        Row { spacing: 10; valign: "center"
+                            Text { text: qsTr("Weapon"); font.family: fontUi; font.size: 16; font.weight: "bold"; color: "#3a3b3f" }
+                            Rectangle { grow: 1; height: 6; color: "#8cffffff" } }
+                        Row {
+                            visible: !!fileOp && !!fileOp.weapon; spacing: 10; valign: "center"
+                            Stack { width: 52; height: 52
+                                Rectangle { color: "#2a2b2e" }
+                                Image { source: fileOp && fileOp.weapon ? fileOp.weapon.icon : ""; fit: "contain" } }
+                            Rectangle { width: 4; height: 44; color: "#f2c200" }
+                            Column { grow: 1; spacing: 4
+                                Text { text: fileOp && fileOp.weapon ? fileOp.weapon.name : ""; font.family: fontUi; font.size: 18; font.weight: "medium"; color: "#2a2b2e"; maxLines: 1 }
+                                Stars { count: fileOp && fileOp.weapon ? fileOp.weapon.rarity : 0; size: 16; tint: "#3a3b3f" } }
+                            Column { spacing: 2
+                                Text { text: fileOp && fileOp.weapon ? "LV " + fileOp.weapon.level : ""; align: "right"; font.family: fontNum; font.size: 18; font.weight: "bold"; color: "#2a2b2e" }
+                                Text { text: fileOp && fileOp.weapon ? caps(qsTr("Refine %1  ·  Breakthrough %2", fileOp.weapon.refine, fileOp.weapon.breakthrough)) : ""; align: "right"; font.family: fontMono; font.mono: true; font.size: 9; color: "#55575f" } }
+                        }
+                        Grid {
+                            visible: !!fileOp && !!fileOp.weapon && (fileOp.weapon.skills || []).length > 0; columns: 1; spacing: 3
+                            model: fileOp && fileOp.weapon ? fileOp.weapon.skills || [] : []
+                            delegate: Rectangle { color: "#59ffffff"; horizontalPadding: 10; verticalPadding: 5
+                                Row { spacing: 8; valign: "center"
+                                    Path { width: 7; height: 7; d: "M0.5 0 L1 0.5 L0.5 1 L0 0.5 Z"; fill: "#2a2b2e"; stroke: "transparent"; strokeWidth: 0 }
+                                    Text { grow: 1; text: modelData.name; font.family: fontUi; font.size: 13; color: "#2a2b2e"; maxLines: 1 }
+                                    Text { text: "LV " + modelData.level + " / " + modelData.max; font.family: fontNum; font.size: 12.5; font.tabular: true; color: "#3a3b3f" } } }
+                        }
+                        Text { visible: !!fileOp && !fileOp.weapon; text: qsTr("No weapon"); font.family: fontUi; font.size: 13; color: "#55575f" }
+                        Grid {
+                            visible: !!fileOp && (fileOp.gear || []).length > 0; columns: 1; spacing: 4
+                            model: fileOp ? fileOp.gear || [] : []
+                            delegate: Row { spacing: 10
+                                Text { width: 70; text: caps(modelData.slot); font.family: fontWide; font.width: "expanded"; font.size: 8.5; font.letterSpacing: 0.8; color: "#55575f" }
+                                Text { grow: 1; text: modelData.name; font.family: fontUi; font.size: 12.5; color: "#2a2b2e"; maxLines: 1 }
+                                Text { text: modelData.level ? "LV " + modelData.level : ""; font.family: fontNum; font.size: 12; font.tabular: true; color: "#2a2b2e" } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    List {
+        grow: 1; fade: 0.03; animate: fileMoving && motion ? 340 : 0; easing: "expo"
+        model: 1
+        delegate: Column {
+            spacing: 20
+
+            Stack {
+                visible: !ok
+                Rectangle { shape: cut; color: container; border.width: 1; border.color: hairline }
+                Row {
+                    Rectangle { width: 3; height: 96; color: sk.status === "error" ? red : sk.status === "loading" || !sk.status ? caption : orange }
+                    Column {
+                        grow: 1; padding: 14; spacing: 10
+                        Text { text: blocked(); font.family: fontUi; font.size: 13.5; color: inkDim; wrap: true }
+                        Row { spacing: 8
+                            Btn { text: qsTr("Read again"); icon: "arrow.clockwise"; small: true; onClicked: skport.send({ refresh: true }) } }
+                    }
+                }
+            }
+
+            Column {
+                visible: ok; spacing: 12
+                Stack {
+                    appear: motion ? "wipe" : ""; appearDuration: 420
+                    Rectangle { shape: cut; color: container; border.width: 1; border.color: hairline }
+                    Column {
+                        padding: 16; spacing: 14
+                        SecHead { index: "01"; title: qsTr("Sanity"); meta: san.fullAt && now < san.fullAt ? caps(qsTr("Full in %1", leftTill(san.fullAt))) + "  ·  " + hm(san.fullAt) : caps(qsTr("Full")); metaColor: san.fullAt && now < san.fullAt ? inkDim : orange }
+                        Row { spacing: 6; valign: "bottom"
+                            Text { text: String(sanityNow()); font.family: fontNum; font.size: 40; font.weight: "light"; font.tabular: true; color: ink; scramble: motion ? 500 : 0; scrambleSet: "0123456789" }
+                            Text { text: "/ " + (san.max || 0); font.family: fontNum; font.size: 17; font.tabular: true; color: inkDim } }
+                        Gauge { compact: true; segments: 20; thickness: 6; value: san.max ? sanityNow() / san.max : 0; tint: sanityNow() >= (san.max || 1) ? orange : signal }
+                        Gauge { label: qsTr("Daily activity"); value: sk.daily && sk.daily.max ? sk.daily.cur / sk.daily.max : 0
+                            text: sk.daily ? sk.daily.cur + "/" + sk.daily.max : ""; segments: 10; thickness: 5; tint: sk.daily && sk.daily.cur >= sk.daily.max ? green : signal }
+                        Gauge { label: qsTr("Pass"); value: sk.pass && sk.pass.max ? sk.pass.cur / sk.pass.max : 0
+                            text: sk.pass ? qsTr("LV %1/%2", sk.pass.cur, sk.pass.max) : ""; thickness: 4; tint: blue }
+                    }
+                }
+                Grid {
+                    columns: 4; spacing: 6
+                    model: [[qsTr("Operators"), role.operators], [qsTr("Weapons"), role.weapons], [qsTr("Documents"), role.documents], [qsTr("Achieved"), sk.achievements]]
+                    delegate: Stack {
+                        appear: motion ? "flicker" : ""; appearDelay: 120 + index * 50
+                        Rectangle { shape: cutPlate; color: containerHigh }
+                        Column { padding: 10; spacing: 2
+                            Text { text: two(modelData[1] || 0); font.family: fontNum; font.size: 22; font.tabular: true; color: ink }
+                            Text { text: caps(modelData[0]); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 0.8; color: inkDim; maxLines: 1 } }
+                    }
+                }
+                Row {
+                    visible: !!role.mission; spacing: 10; valign: "stretch"
+                    Rectangle { width: 3; color: signal }
+                    Column { spacing: 2
+                        Text { text: caps(qsTr("Main mission")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1.2; color: inkDim }
+                        Text { text: role.mission || ""; font.family: fontUi; font.size: 14; font.weight: "medium"; color: ink; wrap: true; maxLines: 2 } }
+                }
+            }
+
+            Column {
+                visible: ok && !!sk.checkin && (sk.checkin.days || []).length > 0; spacing: 12
+                SecHead { index: "02"; title: qsTr("Check-in"); meta: two(sk.checkin ? sk.checkin.done : 0) + " / " + two(sk.checkin ? sk.checkin.days.length : 0) + "  ·  " + (sk.checkin && sk.checkin.today ? caps(qsTr("Done today")) : caps(qsTr("Not yet today")))
+                    metaColor: sk.checkin && sk.checkin.today ? green : orange }
+                Grid {
+                    columns: 7; spacing: 4
+                    model: days
+                    delegate: Stack {
+                        height: 62
+                        appear: motion ? "flicker" : ""; appearDelay: 100 + index * 12
+                        tip: modelData.name ? modelData.name.split("|")[0] + (modelData.count > 1 ? " ×" + modelData.count : "") : ""
+                        Rectangle { shape: cutPlate; color: modelData.done ? signal : modelData.today ? alpha(signal, 0.08) : containerHigh
+                            border.width: modelData.today ? 1 : 0; border.color: signal }
+                        Column { halign: "center"; valign: "center"; spacing: 2
+                            Image { visible: !!modelData.icon; source: modelData.icon; width: 34; height: 34; fit: "contain"; opacity: modelData.done ? 0.5 : 1 }
+                            Text { text: two(modelData.day) + (modelData.count > 1 ? "  ×" + modelData.count : ""); align: "center"; font.family: fontNum; font.size: 10; font.tabular: true; color: modelData.done ? onSignal : modelData.today ? primary : inkDim } }
+                    }
+                }
+            }
+
+            Column {
+                visible: ok && (sk.operators || []).length > 0; spacing: 12
+                SecHead { index: "03"; title: qsTr("Operators"); meta: two(ops.length)
+                    Grid { columns: Math.max(1, rarityCounts.length); width: rarityCounts.length * 46; model: rarityCounts
+                        delegate: Row { spacing: 4; valign: "center"; horizontalPadding: 4
+                            Stars { count: 1; size: 13; tint: rareTint(modelData[0]) }
+                            Text { text: "×" + modelData[1]; font.family: fontNum; font.size: 11; font.tabular: true; color: inkDim } } } }
+                Grid {
+                    columns: 6; spacing: 6
+                    model: ops
+                    delegate: OperatorCard { op: modelData; chosen: picked === modelData.id; appear: motion ? "flicker" : ""; appearDelay: 160 + index * 35
+                        onClicked: picked = picked === modelData.id ? "" : modelData.id }
+                }
+            }
+
+            Column {
+                visible: ok && (sk.regions || []).length > 0; spacing: 12
+                SecHead { index: "04"; title: qsTr("Regional development"); meta: two((sk.regions || []).length) }
+                Grid {
+                    columns: 1; spacing: 8
+                    model: regions
+                    delegate: RegionPanel { region: modelData }
+                }
+            }
+
+            Column {
+                visible: (sk.banners || []).length > 0; spacing: 12
+                SecHead { index: "05"; title: qsTr("Headhunting"); meta: two((sk.banners || []).length) }
+                Grid {
+                    columns: 1; spacing: 8
+                    model: bannerList
+                    delegate: Stack {
+                        Rectangle { shape: cut; color: container; border.width: 1; border.color: hairline }
+                        Row {
+                            padding: 10; spacing: 14
+                            Column { width: 84
+                                Stack { height: 81
+                                    Shader { source: "shaders/card.metal"; running: false; params: [0, 0.9, 0, 0]; colors: [modelData.featured.length ? rareTint(modelData.featured[0].rarity) : hairline, well, "#ffffff"] }
+                                    Image { source: modelData.featured.length ? modelData.featured[0].pic : ""; fit: "cover" } }
+                                Rectangle { height: 3; color: modelData.featured.length ? rareTint(modelData.featured[0].rarity) : hairline } }
+                            Column { grow: 1; spacing: 4
+                                Text { text: caps(modelData.kind === "weapon" ? qsTr("Arsenal") : qsTr("Operators")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 8.5; font.letterSpacing: 1; color: inkDim }
+                                Text { text: modelData.name; font.family: fontUi; font.size: 15; font.weight: "medium"; color: ink; maxLines: 1 }
+                                Row { spacing: 6; valign: "center"
+                                    Text { text: modelData.featured.map((f) => f.name).join("  ·  "); font.family: fontUi; font.size: 12.5; color: modelData.featured.length ? rareTint(modelData.featured[0].rarity) : inkDim; maxLines: 1 }
+                                    Stars { visible: modelData.featured.length > 0; count: modelData.featured.length ? modelData.featured[0].rarity : 0; size: 15; tint: "#e4e4e6" } }
+                                Text { text: now < modelData.end ? caps(qsTr("Ends in %1", leftTill(modelData.end))) : caps(qsTr("Ended")); font.family: fontMono; font.mono: true; font.size: 10; color: inkDim } }
+                        }
+                    }
+                }
+            }
+
+            Text { visible: !!sk.asOf; text: caps(sk.demo ? qsTr("Demo data  ·  not your account") : qsTr("SKPort  ·  as of %1", sk.asOf ? hm(sk.asOf) : "")); font.family: fontMono; font.mono: true; font.size: 9.5; font.letterSpacing: 0.5; color: caption }
+        }
+    }
+}

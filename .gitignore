@@ -1,0 +1,7 @@
+build/
+target/
+.DS_Store
+distros/*/backends/*/target/
+/bazel-*
+/distros/*/bazel-*
+MODULE.bazel.lock

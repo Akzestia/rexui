@@ -1,0 +1,18 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 460
+    group: "side"; title: "Discord"; iconColor: "#5865f2"
+    icon: web.favicon || "bubble.left.and.bubble.right.fill"
+    key: "cmd+i"
+
+    Rectangle {
+        grow: 1; radius: 10
+        WebView {
+            id: web
+            cookies: "zen"
+            storage: ["discord.com"]
+            url: "https://discord.com/app"
+        }
+    }
+}

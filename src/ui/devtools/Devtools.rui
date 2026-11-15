@@ -1,0 +1,28 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Dock {
+    padding: 0; spacing: 0
+    property var T: debug.theme || ({})
+    property bool dark: T.dark !== undefined ? !!T.dark : theme.dark
+    property var bg: T.bg || (dark ? "#f0131418" : "#f4f6f6f8")
+    property var line: T.line || (dark ? "#2a2d34" : "#dcdee2")
+    property var blue: T.accent || "#4f8cff"
+    property real leftW: dragL >= 0 ? dragL : (debug.options.devtoolsSplit || 380)
+    property real dragL: -1
+    property real dragFrom: 0
+    Row {
+        grow: 1; valign: "stretch"; spacing: 0
+        ElementsPanel { width: leftW }
+        Stack {
+            width: 7
+            Rectangle { color: bg }
+            Stack { halign: "center"; Rectangle { width: splitB.hovered || dragL >= 0 ? 2 : 1; color: splitB.hovered || dragL >= 0 ? blue : line; colorAnimation: 120 } }
+            Button {
+                id: splitB; stateLayer: false; drag: true; cursor: "resizeLeftRight"
+                onDragged: { if (dragL < 0) dragFrom = leftW; dragL = Math.max(200, Math.min(1200, dragFrom + dx)); }
+                onDropped: { debug.option("devtoolsSplit", Math.round(dragL)); dragL = -1; }
+            }
+        }
+        ConsolePanel { grow: 1 }
+    }
+}

@@ -1,0 +1,165 @@
+# rexui License 1.0
+
+<https://github.com/Akzestia/rexui/blob/main/LICENSES/LicenseRef-rexui-1.0.txt>
+
+Required Notice: Copyright (c) 2026-present アクゼスティア
+
+## Purpose
+
+This section explains why these terms are the way they are.  It is here to help you read them.  It is not one of the terms: the sections after it decide what you may do, and nothing here narrows or widens them.
+
+The software is an extension for people who use Rex.  These terms let those people use it, change it, build on it and share it with each other.  They are not an invitation to the makers of other terminals, or of any other product, to take from it.  In particular, these terms are meant to keep anyone from using the software, or what it knows about Rex, to copy Rex or its features, to build the software or parts of it into another terminal or product, or to compete with Rex or with Superlogical's other products.  They are also meant to keep the software from becoming a way to publish the details of Rex's own code that it needs in order to work.  They respect that Rex is Superlogical's, and that Superlogical decides who gets Rex and on what terms.
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of the software for any permitted purpose.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+You may add notices of your own for changes you make.  You may not remove or alter the licensor's `Required Notice:` lines, so every copy and every changed version of the software keeps crediting the licensor.
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Permitted Purposes
+
+These are the permitted purposes, and there are no others:
+
+1. running the software with Rex, if you are a Rex user;
+2. studying, building and testing the software, and running its developer tools (such as its checker, its language server and its editor support), on any computer, with or without Rex, whether or not you are a Rex user;
+3. making changes and new works based on the software that are meant to be run with Rex; and
+4. distributing the software, and changes and new works based on it, so that others can use them for these purposes.
+
+Nothing is a permitted purpose where [Noncompete](#noncompete) or [Encoded Values](#encoded-values) rules it out.
+
+## Rex Only
+
+Because the permitted purposes are a closed list, the software is for Rex and nothing else.  Running the software, or any part of it, or any change or new work based on it, with another program in Rex's place is not a permitted purpose.  Neither is taking any part of the software for use in something that is not meant to be run with Rex.  For example, porting the software, its `.rui` language or its engine to another terminal, editor or application, or using any of them to build one, is not a permitted purpose.
+
+## Your Own Work
+
+These terms make no claim on work that is yours alone.  A distro, dock, theme, widget, backend or tool that you write yourself, and that contains no part of the software, is not under these terms just because it runs on the software or talks to it.  You choose its terms.  Where your work does contain part of the software, for example a component copied from the software's own kit, these terms cover that part and you choose the terms for the rest.
+
+## Noncompete
+
+No purpose is a permitted purpose if it is developing, or providing to others, a product that competes with the software, with Rex, or with any other product of Superlogical's.
+
+This rules out purposes, not people.  If you work for a company that has a competing product, you may still use the software for the permitted purposes as anyone else may, as long as what you do with it is not part of developing or providing that product.
+
+## Competition
+
+A product competes with the software, with Rex, or with another product of Superlogical's if it is offered as, or serves as, a substitute for its functionality or value.  A product may compete regardless how it is designed or deployed.  For example, a product may compete even if it provides its functionality via any kind of interface (including services, libraries or plug-ins), even if it is ported to a different platform or programming language, and even if it is provided free of charge.
+
+For example, a terminal emulator, or a session server for terminals, competes with Rex.  Docks, panels, a UI language or a plugin host for a terminal other than Rex compete with the software.
+
+[Noncompete](#noncompete) is only about what is done with the software.  These terms say nothing about a product that is made, and provided, without any of it.
+
+A version of the software itself, with or without changes, that is meant to be run with Rex and is distributed under these terms, with the licensor's `Required Notice:` lines kept as [Notices](#notices) requires, does not compete with the software.
+
+## New Products
+
+If you are using the software for a permitted purpose, and Superlogical brings what you are doing into competition by providing a new product, or a new version of a product, you may continue doing it with the versions of the software that were available under these terms beforehand, but not with any later versions.
+
+## Encoded Values
+
+The software needs to know some details of Rex's own code in order to work with Rex.  It carries them as encoded values, so that it can work without publishing a map of Rex's internals.  These terms keep it that way:
+
+- The software and its own build (its `rxgen` step) may decode encoded values, as they come, wherever you build or run the software for a permitted purpose.  A build of the software holds encoded values in plain form inside it.  Making such a build, and distributing it, is not decoding or publishing them.  Reading them back out of it is decoding.
+- You may decode encoded values yourself only as far as you need to in order to make changes to the software for a permitted purpose, such as keeping it working with a new version of Rex.  You must keep what you decode private: on computers you control, or with services that work for you and keep it private.
+- You may not publish, share or distribute decoded values, whether one or many, on their own or in a list, map, document, dataset or any other collection, except to the licensor as part of sending changes.  You may not distribute the source of the software, or of changes or new works based on it, with encoded values written out in plain form.
+- You may not use encoded values, decoded or not, for anything but making the software work with Rex.  In particular, you may not use them to copy or interfere with Rex, to get around Rex's licensing or access controls, to develop a product that competes with Rex, or to train or tune a machine learning model.
+
+Changes you make may add values of their own.  They must be in the same encoded form, and they are then encoded values too.
+
+## Superlogical
+
+Superlogical may use the software for any purpose.  For Superlogical, every purpose is a permitted purpose, and [Rex Only](#rex-only), [Noncompete](#noncompete) and [Encoded Values](#encoded-values) do not apply.
+
+## Rex's Terms
+
+These terms give you no rights in Rex and no access to it.  Only Superlogical can give you those, and nothing in these terms changes what Superlogical's own terms allow or forbid.  The software is not made, endorsed or supported by Superlogical.
+
+## Other People's Work
+
+These terms cover only the licensor's own work.  What comes with the software includes third-party material, which the file `THIRD-PARTY.md` lists.  Third-party material is under its own license, from its own owner, and these terms neither add to that license nor take anything from it.  If something of someone else's comes with the software and is missing from that list, these terms still do not cover it.
+
+Some of what comes with the software is marked as under a different license, such as the MIT License or the GNU General Public License: the distros and the SDKs, for example.  Those parts are under that license, not these terms.
+
+## No Trademarks
+
+These terms give you no rights in any name, logo or trademark: not the licensor's, not Superlogical's, and not anyone else's whose name or mark appears in or with the software.  You may use a name to say truthfully what your work is for or what it is based on.
+
+## Contributions
+
+If you send the licensor changes to the software for the licensor to include, you grant the licensor a license to use, change, distribute and license those changes, under these terms or any others, including later versions of these terms and open source licenses.  You must have the right to grant that license.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law.  These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately.  If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms.
+
+The **software** is the licensor's own work in what the licensor makes available under these terms, as source and as builds made from it.  It does not include third-party material, or any part that is marked as under a different license.
+
+**Third-party material** is anything that comes with the software, or that the software's install steps download, that is someone else's work.  It includes everything listed in `THIRD-PARTY.md` and everything that carries someone else's license notice.
+
+**Superlogical** is Superlogical, Inc. (superlogical.com), the company that makes Rex, together with its affiliates and with anyone who takes over Rex from it.
+
+**Rex** is Superlogical's terminal application (https://superlogical.com/rex), together with the Rex Server and the `rex` command-line tool that come with it.  It means every version of them: beta, preview and released, and under any name Superlogical gives them later.
+
+A **Rex user** is a person or organization that Superlogical has given access to Rex, and whose access Superlogical has not ended.  While Superlogical gives Rex out through a beta program, that means the people in the program.  Afterwards it means whoever Superlogical gives Rex to, however it does so.
+
+**With Rex** means loaded into a copy of Rex, or working together with a running copy of Rex.
+
+**Encoded values** are the names, layouts and other details of Rex's own code that the software carries in a form other than plain text, together with the numbered ids that stand for them.  Examples are the encoded form of the software's list of what it uses of Rex (`src/rex/deps.txt`) and the names in its source written with `RX_NAME_X`.  The term covers the same details in every form: encoded, decoded, and as a build of the software holds them.
+
+**Decoding** means getting encoded values in plain form by any means, including reading them out of a build of the software or out of the software as it runs.  **Decoded values** are encoded values in plain form.
+
+A **product** can be a good or service, or a combination of them.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all its affiliates.
+
+**Affiliates** means the other organizations that an organization has control over, is under the control of, or is under common control with.
+
+**Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.

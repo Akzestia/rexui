@@ -1,0 +1,86 @@
+#compdef rexui
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+
+_rexui_distros() {
+    local -a ds
+    local shown d
+    shown=$(defaults read rexui distro 2>/dev/null)
+    for d in ~/.config/rex/distros/*(N-/); do
+        d=${d:t}
+        if [[ $d == $shown ]]; then ds+=("${d}:shown now"); else ds+=("${d}:distro"); fi
+    done
+    [[ $shown == */distros/vanilla ]] && ds+=("default:vanilla, Rex as it is (shown now)") || ds+=("default:vanilla, Rex as it is")
+    _describe -t distros 'distro' ds
+}
+
+_rexui() {
+    local -a commands
+    commands=(
+        'load:show a distro, a folder, or default (vanilla)'
+        'default:vanilla Rex: no docks, rexui options as Rex has them'
+        'list:list the distros, the one shown marked'
+        'current:print the folder shown'
+        'build:build its backends with Bazel (what is shown, without one)'
+        'try:show a folder or a file instead of the distro, till try stop'
+        'check:load as rexui would and print the errors'
+        'new:make a distro to start from in ~/.config/rex/distros'
+        'loading:play the loading screen now (--hold: till loading stop)'
+        'embed:show an app in this pane (or --split, --tab, --block)'
+        'pane:show a .rui widget or a web page in this pane'
+        'launch:show one of the launcher'"'"'s apps or widgets by its name'
+        'completions:print the shell completion (zsh or bash)'
+        'help:print the help'
+    )
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'rexui command' commands
+        return
+    fi
+    case $words[2] in
+    load)
+        (( CURRENT == 3 )) && _alternative 'distros:distro:_rexui_distros' 'folders:folder:_files -/' ;;
+    build)
+        if (( CURRENT == 3 )); then
+            _alternative 'flags:flag:((--stale\:"only when something changed since the last build"))' \
+                'distros:distro:_rexui_distros' 'folders:folder:_files -/'
+        elif (( CURRENT == 4 )) && [[ $words[3] == --stale ]]; then
+            _alternative 'distros:distro:_rexui_distros' 'folders:folder:_files -/'
+        fi ;;
+    try)
+        (( CURRENT == 3 )) && _alternative 'stop:stop:((stop\:"back to the distro"))' 'distros:distro:_rexui_distros' \
+            'files:.rui file or folder:_files -g "*.rui(-.)"' ;;
+    check)
+        (( CURRENT == 3 )) && _alternative 'distros:distro:_rexui_distros' 'files:.rui file or folder:_files -g "*.rui(-.)"' ;;
+    new)
+        (( CURRENT == 3 )) && _message 'a name for the new distro' ;;
+    loading)
+        _alternative 'flags:flag:((stop\:"its exit, now" --hold\:"stays loading till rexui loading stop"))' \
+            'files:.rui file:_files -g "*.rui(-.)"' ;;
+    embed | pane | launch)
+        if [[ $words[CURRENT-1] == --split ]]; then _values 'side' right left above below; return; fi
+        [[ $words[CURRENT-1] == --block ]] && { _message 'a block id'; return; }
+        local -a where=('--split:a new pane beside the focused one' '--tab:a new tab' '--block:over that pane'"'"'s terminal')
+        case $words[2] in
+        embed)
+            where+=('--relative:the app'"'"'s mouse is relative (games)' '--crossover:a Windows program in a CrossOver bottle'
+                '--library:print the library'"'"'s path')
+            _describe -t options 'where' where
+            _alternative 'apps:app:_files -g "*.app(-/)"' 'commands:program:_command_names -e' ;;
+        pane)
+            local -a ws; local w
+            for w in "$(rexui current 2>/dev/null)"/panes/*.rui(N); do ws+=("${w:t:r}:widget"); done
+            _describe -t options 'where' where
+            _describe -t widgets 'widget' ws
+            _files -g '*.rui(-.)' ;;
+        launch)
+            local -a ls; local k n
+            rexui launch 2>/dev/null | while read -r k n; do ls+=("${n//:/\\:}:$k"); done
+            _describe -t options 'where' where
+            _describe -t launchable 'app or widget' ls ;;
+        esac ;;
+    completions)
+        (( CURRENT == 3 )) && _values 'shell' zsh bash ;;
+    esac
+}
+
+_rexui "$@"

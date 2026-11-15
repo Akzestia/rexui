@@ -1,0 +1,16 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Stack {
+    id: sw
+    width: 36; height: 20
+    property bool checked: false
+    property bool enabled: true
+    property var onColor: "accent"
+    property var offColor: theme.dark ? "#4d4d4d" : "#c4c4c4"
+    property var knobColor: "#ffffff"
+    signal toggled(bool checked)
+    opacity: enabled ? 1 : 0.4
+    Rectangle { radius: 10; color: sw.checked ? sw.onColor : sw.offColor; colorAnimation: 120 }
+    Rectangle { width: 16; height: 16; radius: 8; color: sw.knobColor; transform.y: 2; transform.x: sw.checked ? 18 : 2; animate: 140; easing: "standard" }
+    Button { stateLayer: false; enabled: sw.enabled; cursor: "pointer"; onClicked: { sw.checked = !sw.checked; sw.toggled(sw.checked) } }
+}

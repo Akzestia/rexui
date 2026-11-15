@@ -1,0 +1,205 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Column {
+    id: aic
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property var state: ({})
+    property bool compact: false
+    property bool running: true
+    property string shaders: "shaders/"
+    spacing: compact ? 0 : 18
+
+    function gb(b) { return ((b || 0) / 1073741824).toFixed((b || 0) >= 1e11 ? 0 : 1); }
+    function rate(b) {
+        b = b || 0;
+        return b >= 1048576 ? (b / 1048576).toFixed(1) + " MB/s" : b >= 1024 ? Math.round(b / 1024) + " KB/s" : Math.round(b) + " B/s";
+    }
+    function pct(x) { return Math.round((x || 0) * 100) + "%"; }
+    property var lanes: {
+        const c = state.cores || [];
+        if (c.length <= 12) return c;
+        const out = [];
+        for (let i = 0; i < c.length; i += 2) out.push(((c[i] || 0) + (c[i + 1] || 0)) / 2);
+        return out.slice(0, 12);
+    }
+    property bool paired: (state.cores || []).length > 12
+    property bool hasBattery: typeof state.battery === "number" && state.battery >= 0
+    property bool low: hasBattery && state.battery < 0.15 && !state.charging
+    property var fourLanes: {
+        const c = state.cores || [], out = [];
+        if (!c.length) return [0, 0, 0, 0];
+        for (let g = 0; g < 4; g++) {
+            const part = c.slice(Math.floor(g * c.length / 4), Math.floor((g + 1) * c.length / 4));
+            out.push(part.length ? part.reduce((a, b) => a + b, 0) / part.length : 0);
+        }
+        return out;
+    }
+    property var beltParams: {
+        const p = [];
+        for (let i = 0; i < 12; i++) p.push(lanes[i] || 0);
+        return p.concat([Math.max(1, lanes.length), 36, 0]);
+    }
+
+    Rectangle {
+        visible: aic.compact
+        color: container; border.width: 1; border.color: hairline; horizontalPadding: 16; verticalPadding: 12
+        Row {
+            spacing: 20
+            Column {
+                width: 150; spacing: 4
+                Text { text: "// " + caps(qsTr("AIC monitor")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.6; color: caption }
+                Text { text: qsTr("%1 cores · %2 busy", (aic.state.cores || []).length, aic.pct(aic.state.cpu)); font.family: fontUi; font.size: 13; color: ink }
+                Text { text: caps(qsTr("Power %1", aic.hasBattery ? aic.pct(aic.state.battery) : qsTr("mains"))) + (aic.state.charging ? " ↑" : ""); font.family: fontMono; font.mono: true; font.size: 9.5; color: aic.low ? red : inkDim }
+            }
+            Stack {
+                grow: 1; height: 54
+                Shader { source: aic.shaders + "belt.metal"; running: aic.running && motion; fps: 24; params: aic.fourLanes.concat([0, 0, 0, 0, 0, 0, 0, 0, 4, 36, 0]); colors: [alpha(signal, 0.85), alpha(signal, 0.25), containerHighest, signal] }
+            }
+            Column {
+                width: 128; spacing: 8
+                Gauge { label: qsTr("Depot"); value: aic.state.mem || 0; text: aic.gb(aic.state.memUsed) + "/" + aic.gb(aic.state.memTotal) + " GB"; segments: 10; tint: (aic.state.mem || 0) > 0.9 ? red : signal }
+                Gauge { label: qsTr("Warehouse"); value: aic.state.disk || 0; text: aic.pct(aic.state.disk); segments: 10; tint: (aic.state.disk || 0) > 0.9 ? red : signal }
+            }
+            Column {
+                width: 96; spacing: 4
+                Text { text: caps(qsTr("Transport")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 1.2; color: caption }
+                Text { text: "↓ " + aic.rate(aic.state.netIn); font.family: fontNum; font.size: 12; font.tabular: true; color: ink }
+                Text { text: "↑ " + aic.rate(aic.state.netOut); font.family: fontNum; font.size: 12; font.tabular: true; color: inkDim }
+            }
+        }
+    }
+
+    Column {
+        visible: !aic.compact; spacing: 8
+        Row {
+            spacing: 8
+            Text { text: caps(qsTr("Production")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 1.2; color: primary }
+            Item { grow: 1 }
+            Text { text: qsTr("%1 busy", aic.pct(aic.state.cpu)); font.family: fontNum; font.size: 13; font.tabular: true; color: ink }
+        }
+        Row {
+            spacing: 8
+            Column {
+                width: 50
+                Grid {
+                    columns: 1; model: aic.lanes.length
+                    delegate: Stack { height: 22; Text { text: (aic.paired ? qsTr("PAIR") : qsTr("CORE")) + " " + (index < 9 ? "0" : "") + (index + 1); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.4; color: caption } }
+                }
+            }
+            Stack {
+                grow: 1; height: Math.max(22, aic.lanes.length * 22)
+                Shader { source: aic.shaders + "belt.metal"; running: aic.running && motion; fps: 24; params: aic.beltParams.slice(0, 12).concat([Math.max(1, aic.lanes.length), 36, 22]); colors: [alpha(signal, 0.9), alpha(signal, 0.22), containerHighest, signal] }
+            }
+        }
+        Text { visible: !(aic.state.cores || []).length; text: qsTr("Reading the cores…"); font.family: fontUi; font.size: 12; color: caption }
+    }
+
+    Column {
+        visible: !aic.compact; spacing: 8
+        Row {
+            spacing: 8
+            Text { text: caps(qsTr("Power")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 1.2; color: primary }
+            Item { grow: 1 }
+            Text { text: aic.hasBattery ? aic.pct(aic.state.battery) + (aic.state.charging ? " · " + qsTr("charging") : "") : qsTr("On mains"); font.family: fontNum; font.size: 13; font.tabular: true; color: aic.low ? red : ink }
+        }
+        Gauge { visible: aic.hasBattery; compact: true; value: aic.state.battery || 0; segments: 20; thickness: 8; tint: aic.low ? red : (aic.state.battery || 0) < 0.3 ? orange : signal }
+        Stack {
+            visible: !!aic.state.charging; height: 24
+            Shader { source: aic.shaders + "curtain.metal"; running: aic.running && motion && !!aic.state.charging; fps: 24; params: [4, 0, 0.35]; colors: [alpha(signal, 0.8)] }
+        }
+        Stack {
+            visible: aic.low; height: 24
+            Rectangle { color: alpha(red, 0.18) }
+            Row {
+                Stack { width: 40; Shader { source: aic.shaders + "hatch.metal"; running: false; params: [45, 8, 0.4, 0, 0, 0]; colors: [red] } }
+                Item { grow: 1 }
+                Stack { width: 40; Shader { source: aic.shaders + "hatch.metal"; running: false; params: [45, 8, 0.4, 0, 0, 0]; colors: [red] } }
+            }
+            Row { halign: "center"; spacing: 6
+                Icon { name: "bolt.slash.fill"; font.size: 11; color: red }
+                Text { text: qsTr("Battery low: %1", aic.pct(aic.state.battery)); font.family: fontUi; font.size: 12; font.weight: "medium"; color: ink } }
+        }
+        Text { visible: !aic.hasBattery; text: qsTr("No battery: this Mac runs on mains."); font.family: fontUi; font.size: 12; color: caption }
+    }
+
+    Row {
+        visible: !aic.compact; spacing: 16
+        Column {
+            grow: 1; spacing: 12
+            Gauge { label: qsTr("Depot · memory"); value: aic.state.mem || 0; text: aic.gb(aic.state.memUsed) + "/" + aic.gb(aic.state.memTotal) + " GB"; segments: 12; tint: (aic.state.mem || 0) > 0.9 ? red : signal }
+            Gauge { label: qsTr("Warehouse · disk"); value: aic.state.disk || 0; text: aic.gb(aic.state.diskUsed) + "/" + aic.gb(aic.state.diskTotal) + " GB"; segments: 12; tint: (aic.state.disk || 0) > 0.9 ? red : signal }
+        }
+        Column {
+            width: 104; spacing: 6
+            Text { text: caps(qsTr("Transport")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 1.2; color: caption }
+            Row { spacing: 6; Text { text: "IN"; font.family: fontMono; font.mono: true; font.size: 8.5; color: caption }; Text { text: aic.rate(aic.state.netIn); font.family: fontNum; font.size: 13; font.tabular: true; color: ink } }
+            Row { spacing: 6; Text { text: "OUT"; font.family: fontMono; font.mono: true; font.size: 8.5; color: caption }; Text { text: aic.rate(aic.state.netOut); font.family: fontNum; font.size: 13; font.tabular: true; color: inkDim } }
+        }
+    }
+
+    Column {
+        visible: !aic.compact; spacing: 8
+        Text { text: caps(qsTr("Machines")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 1.2; color: primary }
+        Grid {
+            columns: 2; spacing: 8
+            model: aic.state.top || []
+            delegate: Rectangle {
+                shape: "cut 8, square, cut 8, square"; color: container; border.width: 1; border.color: hairline
+                horizontalPadding: 12; verticalPadding: 9
+                Column {
+                    spacing: 3
+                    Text { text: modelData.name; font.family: fontUi; font.size: 12; font.weight: "medium"; color: ink; maxLines: 1 }
+                    Row { spacing: 6
+                        Text { text: Math.round(modelData.cpu * 100) + "%"; font.family: fontNum; font.size: 15; font.tabular: true; color: index === 0 ? primary : ink }
+                        Text { text: caps(qsTr("of a core")); font.family: fontMono; font.mono: true; font.size: 8; color: caption } }
+                }
+            }
+        }
+        Text { visible: !(aic.state.top || []).length; text: qsTr("Nothing running hard."); font.family: fontUi; font.size: 12; color: caption }
+    }
+}

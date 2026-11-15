@@ -1,0 +1,71 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    id: dock
+    side: "top-right"; width: 340; margin: 14
+    height: Math.max(1, shown.length * 76)
+    color: "transparent"; resizable: false
+    title: qsTr("Notifications")
+
+    property bool dark: theme.dark
+    property var surface: dark ? "#ee1d1d22" : "#f4fbfbfd"
+    property var ink: dark ? "#f2f2f5" : "#1b1b1f"
+    property var inkDim: dark ? "#b4b4bc" : "#5d5d66"
+    property var hairline: dark ? "#26ffffff" : "#1a000000"
+    property var shown: []
+    property var hovered: ""
+
+    function symbol(n) {
+        if (n.tone === "error" || n.status === "error") return "exclamationmark.octagon.fill";
+        if (n.tone === "warning" || n.status === "blocked") return "hand.raised.fill";
+        if (n.tone === "success" || n.status === "done") return "checkmark.circle.fill";
+        if (n.source === "terminal") return "terminal.fill";
+        return "bell.fill";
+    }
+    function tint(n) {
+        if (n.tone === "error" || n.status === "error") return "#ff6b6b";
+        if (n.tone === "warning" || n.status === "blocked") return "#ffb35c";
+        if (n.tone === "success" || n.status === "done") return "#5fd38d";
+        return dark ? "#8ab4ff" : "#2f6fe4";
+    }
+    function drop(id) { shown = shown.filter((x) => x.id !== id) }
+
+    onNotice: if (notice.to ? notice.to === "docks" : notices.taking) shown = [notice].concat(shown.filter((x) => x.id !== notice.id)).slice(0, 4)
+
+    Timer {
+        interval: 500; running: dock.shown.length > 0
+        onTriggered: {
+            const now = Date.now()
+            const keep = dock.shown.filter((x) => x.id === dock.hovered || now - x.time < 6000)
+            if (keep.length !== dock.shown.length) dock.shown = keep
+        }
+    }
+
+    Column {
+        spacing: 8
+        List {
+            model: dock.shown
+            spacing: 8
+            gutter: 0
+            delegate: Stack {
+                height: 68
+                animate: 220; easing: "standard"
+                Rectangle { color: dock.surface; radius: 16; border.color: dock.hairline; border.width: 1 }
+                Row {
+                    padding: 12; spacing: 12
+                    Icon { name: dock.symbol(modelData); color: dock.tint(modelData); font.size: 18 }
+                    Column {
+                        grow: 1; spacing: 2
+                        Text { text: modelData.title || modelData.subtitle || qsTr("Notification"); color: dock.ink; font.size: 13; font.weight: "semibold"; maxLines: 1 }
+                        Text { text: modelData.body || modelData.subtitle; color: dock.inkDim; font.size: 12; maxLines: 2; wrap: true; visible: !!(modelData.body || modelData.subtitle) }
+                    }
+                }
+                Button {
+                    stateRadius: 16
+                    onHoveredChanged: dock.hovered = hovered ? modelData.id : (dock.hovered === modelData.id ? "" : dock.hovered)
+                    onClicked: { notices.reveal(modelData.id); dock.drop(modelData.id) }
+                }
+            }
+        }
+    }
+}

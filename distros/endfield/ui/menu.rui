@@ -1,0 +1,315 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    side: "top"; height: 0; span: "window"; resizable: false
+    color: "transparent"
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    property var devTheme: ({
+        dark: !light, bg: surface, raised: container, hover: containerHigh, line: hairline, field: well,
+        ink: ink, dim: inkDim, faint: caption, accent: signal, onAccent: onSignal, selected: alpha(signal, light ? 0.3 : 0.16),
+        tag: blue, id: primary, comp: orange, string: green, number: blue,
+        warn: orange, error: red, ok: green,
+        errorRow: alpha(red, 0.16), warnRow: alpha(orange, 0.14), radius: 0,
+    })
+    onDevThemeChanged: debug.setTheme(devTheme)
+
+    function keyOf(title) { const e = (keys.list || []).find((k) => k.from === "rex" && k.title === title); return e ? e.key : ""; }
+    property var menuItems: [
+        { id: "copy", icon: "doc.on.doc", title: qsTr("Copy"), enabled: !!context.hasSelection, key: "cmd+c" },
+        { id: "paste", icon: "doc.on.clipboard", title: qsTr("Paste"), enabled: true, key: "cmd+v" },
+        { separator: true, title: qsTr("Pane") },
+        { id: "pane.split.right", icon: "rectangle.split.2x1", title: qsTr("Split Right"), enabled: true, key: keyOf("Split Right") },
+        { id: "pane.split.down", icon: "rectangle.split.1x2", title: qsTr("Split Down"), enabled: true, key: keyOf("Split Down") },
+        { id: "pane.float", icon: "macwindow.on.rectangle", title: qsTr("Float Pane"), enabled: true, key: keyOf("Float Pane") },
+        { id: "pane.zoom", icon: "arrow.up.left.and.arrow.down.right", title: qsTr("Zoom Pane"), enabled: true, key: keyOf("Zoom Pane") },
+        { separator: true, title: qsTr("Terminal") },
+        { id: "com.superlogical.terminal.clear", icon: "eraser", title: qsTr("Clear"), enabled: true, key: "" },
+        { id: "com.superlogical.terminal.reset", icon: "arrow.counterclockwise", title: qsTr("Reset Terminal"), enabled: true, key: keyOf("Reset Terminal") },
+        { id: "pane.close", icon: "xmark", title: qsTr("Close Pane"), enabled: true, key: keyOf("Close Pane"), danger: true },
+    ]
+    property string menuBlock: (context.block && context.block.block) || ""
+    property var menuPane: (panes.list || []).find((p) => p.id === menuBlock) || null
+    property string menuBg: (menuPane && menuPane.data && menuPane.data.bg) || conf.values["endfield-pane-background"] || "blueprint"
+    property var bgChoices: [
+        { v: "blueprint", l: qsTr("Blueprint") }, { v: "survey", l: qsTr("Survey") }, { v: "dots", l: qsTr("Dots") },
+        { v: "curtain", l: qsTr("Curtain") }, { v: "ribbon", l: qsTr("Ribbon") }, { v: "hatch", l: qsTr("Hatch") }, { v: "none", l: qsTr("None") },
+    ]
+    property string menuShape: (menuPane && menuPane.data && menuPane.data.shape) || ""
+    property var shapeChoices: [
+        { v: "", p: "", l: qsTr("Default") }, { v: "square", p: "square", l: qsTr("Sharp") },
+        { v: "square, cut 10, square, cut 10", p: "square, cut 6, square, cut 6", l: qsTr("Cut") },
+        { v: "cut 22, square, square, square", p: "cut 9, square, square, square", l: qsTr("Notch") },
+        { v: "scoop 10", p: "scoop 5", l: qsTr("Ticket") }, { v: "round 10", p: "round 6", l: qsTr("Round") },
+    ]
+    property var debugChoices: [{ v: "mode", l: qsTr("Dev tools") }, { v: "fps", l: qsTr("FPS") }]
+    function debugOn(v) { return v === "mode" ? debug.enabled : !!debug.options[v]; }
+    function debugFlip(v) { if (v === "mode") debug.toggle(); else debug.option(v, !debug.options[v] || null); }
+    Process { id: files; command: ctxMenu.open ? "endfield-files" : "" }
+    property string menuMedia: (menuPane && menuPane.data && menuPane.data.bg === "media" && menuPane.data.media) || ""
+    function menuOwn(k) { const v = menuPane && menuPane.data ? menuPane.data[k] : undefined; return typeof v === "number" ? v : null; }
+    property bool lookAll: false
+    property var lookKeys: ({ dim: "endfield-pane-dim", blur: "endfield-pane-blur" })
+    Process { id: rxConf; command: ctxMenu.open ? "rexui-rex" : "" }
+    function lookNow(k) {
+        if (!lookAll) return menuOwn(k);
+        const v = parseFloat(conf.values[lookKeys[k]]);
+        return isNaN(v) ? null : v;
+    }
+    function lookPut(k, v) {
+        if (lookAll) rxConf.send({ conf: { [lookKeys[k]]: v === null ? null : String(v) } });
+        else rex.paneData(menuBlock, k, v);
+    }
+    function lookSet(k, v) { lookSent = ({}); lookPut(k, v); }
+    property var lookBuiltin: ({ dim: 0.72, blur: 0 })
+    property var lookSent: ({})
+    property bool lookOpen: ctxMenu.open
+    onLookOpenChanged: lookSent = ({})
+    onLookAllChanged: lookSent = ({})
+    onMenuBlockChanged: lookSent = ({})
+    function lookEff(k) {
+        const own = lookAll ? null : menuOwn(k);
+        if (own !== null) return own;
+        const v = parseFloat(conf.values[lookKeys[k]]);
+        return isNaN(v) ? lookBuiltin[k] : v;
+    }
+    function lookDrag(k, raw) {
+        const v = k === "dim" ? Math.round(raw * 100) / 100 : Math.round(raw);
+        if (v === lookSent[k] || (lookSent[k] === undefined && v === lookEff(k))) return;
+        lookSent = Object.assign({}, lookSent, { [k]: v });
+        lookPut(k, v);
+    }
+    function lookShow(k) { const v = lookEff(k); return k === "dim" ? Math.round(v * 100) + "%" : Math.round(v) + " pt"; }
+    function lookLabel(c) { return c.v !== null ? c.l : lookAll ? qsTr("Reset") : qsTr("Default"); }
+    property var dimChoices: [
+        { v: null, l: qsTr("Default") }, { v: 0.2, l: "20%" }, { v: 0.4, l: "40%" },
+        { v: 0.6, l: "60%" }, { v: 0.75, l: "75%" }, { v: 0.9, l: "90%" },
+    ]
+    property var blurChoices: [
+        { v: null, l: qsTr("Default") }, { v: 0, l: qsTr("Off") }, { v: 4, l: "4" },
+        { v: 8, l: "8" }, { v: 16, l: "16" }, { v: 32, l: "32" },
+    ]
+    function chooseMedia(m) {
+        rex.paneData(menuBlock, "media", m.path);
+        rex.paneData(menuBlock, "mediaKind", m.kind);
+        rex.paneData(menuBlock, "bg", "media");
+    }
+    function runItem(id) {
+        if (id === "copy" || id === "paste") rex.terminal(id);
+        else rex.run(id);
+    }
+
+    Drawer {
+        id: ctxMenu
+        placement: "pointer"; command: ["context.menu"]
+        color: surface; rounding: 0; shape: cut; animation: 160
+        Column {
+            width: 264; padding: 8; spacing: 1
+            Row { spacing: 6; horizontalPadding: 4; verticalPadding: 3
+                Rectangle { width: 16; height: 3; color: valley }; Rectangle { width: 8; height: 3; color: mint }; Rectangle { width: 8; height: 3; color: magenta }
+                Item { grow: 1 }
+                Text { text: menuPane ? "PANE " + two(menuPane.index + 1) : ""; font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.6; color: caption } }
+            Grid {
+                columns: 1; spacing: 1
+                model: menuItems
+                delegate: Stack {
+                    property bool hot: itemButton.hovered && !!modelData.enabled
+                    Row { visible: !!modelData.separator; spacing: 6; horizontalPadding: 6; verticalPadding: 5
+                        Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                        Text { text: caps(modelData.title || ""); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption }
+                        Rectangle { grow: 1; height: 1; color: hairline } }
+                    Stack {
+                        visible: !modelData.separator
+                        Rectangle { color: hot ? containerHigh : "transparent"; colorAnimation: 90 }
+                        Row {
+                            Rectangle { width: 3; height: 28; color: hot ? (modelData.danger ? red : signal) : "transparent" }
+                            Row {
+                                spacing: 9; horizontalPadding: 8; height: 28
+                                Icon { name: modelData.icon || "circle"; font.size: 11; width: 14; color: !modelData.enabled ? faint : hot ? (modelData.danger ? red : primary) : inkDim }
+                                Text { text: modelData.title || ""; font.family: fontUi; font.size: 13; color: modelData.enabled ? ink : faint }
+                                Item { grow: 1 }
+                                KeyCap { visible: !!modelData.key; key: modelData.key || ""; small: true }
+                            }
+                        }
+                        Button { id: itemButton; stateLayer: false; enabled: !modelData.separator && !!modelData.enabled
+                            onClicked: { ctxMenu.open = false; runItem(modelData.id); } }
+                    }
+                }
+            }
+            Column {
+                visible: !!menuBlock; horizontalPadding: 6; spacing: 6; verticalPadding: 6
+                Row { spacing: 6
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Background")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption } }
+                Grid {
+                    columns: 4; spacing: 3
+                    model: bgChoices
+                    delegate: Stack {
+                        Rectangle {
+                            height: 22; halign: "center"; valign: "center"
+                            color: menuBg === modelData.v ? signal : bgButton.hovered ? containerHigh : "transparent"; colorAnimation: 120
+                            border.width: 1; border.color: menuBg === modelData.v ? signal : bgButton.hovered ? lineHot : hairline
+                            Text { text: modelData.l; font.family: fontUi; font.size: 10.5; color: menuBg === modelData.v ? onSignal : ink }
+                        }
+                        Button { id: bgButton; stateLayer: false; onClicked: rex.paneData(menuBlock, "bg", modelData.v) }
+                    }
+                }
+                Row { spacing: 6
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Frame")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption } }
+                Grid {
+                    columns: 3; spacing: 3
+                    model: shapeChoices
+                    delegate: Stack {
+                        Rectangle {
+                            height: 22; shape: modelData.p; halign: "center"; valign: "center"
+                            color: menuShape === modelData.v ? signal : shapeButton.hovered ? containerHigh : "transparent"; colorAnimation: 120
+                            border.width: 1; border.color: menuShape === modelData.v ? signal : shapeButton.hovered ? lineHot : hairline
+                            Text { text: modelData.l; font.family: fontUi; font.size: 10.5; color: menuShape === modelData.v ? onSignal : ink }
+                        }
+                        Button { id: shapeButton; stateLayer: false; onClicked: rex.paneData(menuBlock, "shape", modelData.v || null) }
+                    }
+                }
+                Row { spacing: 6; visible: (files.state.media || []).length > 0
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Media")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption } }
+                Grid {
+                    visible: (files.state.media || []).length > 0
+                    columns: 4; spacing: 3
+                    model: (files.state.media || []).slice(0, 8)
+                    delegate: Stack {
+                        height: 38
+                        Rectangle {
+                            color: container; shape: cutPlate
+                            border.width: menuMedia === modelData.path ? 2 : 1
+                            border.color: menuMedia === modelData.path ? signal : mediaButton.hovered ? lineHot : hairline; colorAnimation: 120
+                            Image { visible: modelData.kind === "image"; source: modelData.kind === "image" ? modelData.path : ""; fit: "cover" }
+                            Stack { visible: modelData.kind === "video"; halign: "center"; valign: "center"; Icon { name: "film"; font.size: 13; color: inkDim } }
+                        }
+                        Button { id: mediaButton; stateLayer: false; onClicked: chooseMedia(modelData) }
+                    }
+                }
+                Row { spacing: 6; valign: "center"
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Dim")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption }
+                    Item { grow: 1 }
+                    Grid {
+                        columns: 2; spacing: 3
+                        model: [{ v: false, l: qsTr("This pane") }, { v: true, l: qsTr("All panes") }]
+                        delegate: Stack {
+                            Rectangle {
+                                horizontalPadding: 6; height: 16; valign: "center"
+                                color: lookAll === modelData.v ? alpha(signal, 0.16) : "transparent"; colorAnimation: 120
+                                border.width: 1; border.color: lookAll === modelData.v ? signal : scopeButton.hovered ? lineHot : hairline
+                                Text { text: caps(modelData.l); font.family: fontMono; font.mono: true; font.size: 8; font.letterSpacing: 0.6; color: lookAll === modelData.v ? primary : caption }
+                            }
+                            Button { id: scopeButton; stateLayer: false; onClicked: lookAll = modelData.v }
+                        }
+                    } }
+                Grid {
+                    columns: 6; spacing: 3
+                    model: dimChoices
+                    delegate: Stack {
+                        property bool on: lookNow("dim") === modelData.v
+                        Rectangle {
+                            height: 22; halign: "center"; valign: "center"
+                            color: on ? signal : dimButton.hovered ? containerHigh : "transparent"; colorAnimation: 120
+                            border.width: 1; border.color: on ? signal : dimButton.hovered ? lineHot : hairline
+                            Text { text: lookLabel(modelData); font.family: fontUi; font.size: 10; color: on ? onSignal : ink }
+                        }
+                        Button { id: dimButton; stateLayer: false; onClicked: lookSet("dim", modelData.v) }
+                    }
+                }
+                Row {
+                    spacing: 8; valign: "center"
+                    Slider { grow: 1; from: 0; to: 1; color: signal; trackColor: hairline; value: lookEff("dim"); onMoved: lookDrag("dim", value); onReleased: lookDrag("dim", value) }
+                    Text { width: 38; align: "right"; text: lookShow("dim"); font.family: fontNum; font.size: 10.5; font.tabular: true; color: inkDim }
+                }
+                Row { spacing: 6
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Blur")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption } }
+                Grid {
+                    columns: 6; spacing: 3
+                    model: blurChoices
+                    delegate: Stack {
+                        property bool on: lookNow("blur") === modelData.v
+                        Rectangle {
+                            height: 22; halign: "center"; valign: "center"
+                            color: on ? signal : blurButton.hovered ? containerHigh : "transparent"; colorAnimation: 120
+                            border.width: 1; border.color: on ? signal : blurButton.hovered ? lineHot : hairline
+                            Text { text: lookLabel(modelData); font.family: fontUi; font.size: 10; color: on ? onSignal : ink }
+                        }
+                        Button { id: blurButton; stateLayer: false; onClicked: lookSet("blur", modelData.v) }
+                    }
+                }
+                Row {
+                    spacing: 8; valign: "center"
+                    Slider { grow: 1; from: 0; to: 64; color: signal; trackColor: hairline; value: lookEff("blur"); onMoved: lookDrag("blur", value); onReleased: lookDrag("blur", value) }
+                    Text { width: 38; align: "right"; text: lookShow("blur"); font.family: fontNum; font.size: 10.5; font.tabular: true; color: inkDim }
+                }
+                Row { spacing: 6
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                    Text { text: caps(qsTr("Debug")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.8; color: caption } }
+                Row {
+                    spacing: 10
+                    Grid {
+                        columns: 2; spacing: 10
+                        model: debugChoices
+                        delegate: Stack {
+                            Row { spacing: 6
+                                Diamond { on: debugOn(modelData.v); size: 9 }
+                                Text { text: modelData.l; font.family: fontUi; font.size: 11.5; color: ink } }
+                            Button { stateLayer: false; onClicked: debugFlip(modelData.v) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

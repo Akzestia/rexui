@@ -1,0 +1,36 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+cc_library(
+    name = "mcp",
+    srcs = [
+        "context.cpp",
+        "link.cpp",
+        "server.cpp",
+        "tools.cpp",
+    ],
+    hdrs = [
+        "context.hpp",
+        "link.hpp",
+        "server.hpp",
+        "tools.hpp",
+    ],
+    deps = ["@nlohmann_json//:json"],
+)
+
+cc_binary(
+    name = "rexui-mcp",
+    srcs = ["main.cpp"],
+    deps = [":mcp"],
+)
+
+cc_test(
+    name = "mcp_test",
+    size = "small",
+    srcs = ["mcp_test.cpp"],
+    deps = [
+        ":mcp",
+        "@googletest//:gtest_main",
+    ],
+)

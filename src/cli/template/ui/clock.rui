@@ -1,0 +1,11 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    side: "right"; width: 260; padding: 12; spacing: 10
+    key: "cmd+shift+2"
+    property var now: new Date()
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+    Panel { title: qsTr("Clock"); Text { text: now.toLocaleTimeString(i18n.locale) } }
+}

@@ -1,0 +1,861 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "top"; height: 38; span: "window"; resizable: false
+    title: qsTr("The bar")
+    color: "transparent"
+    accent: clay
+    property int peekWidth: Math.max(160, Number(conf.values["tab-peek-width"]) || 520)
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var primary: pal[4]
+    property var onPrimary: pal[5]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+    property var glow: light ? "#f6d9c9" : "#4a2a1e"
+    property var clay: "#d97757"
+    property var kraft: "#d4a27f"
+    property var manilla: "#ebdbbc"
+    property var olive: "#788c5d"
+    property var sky: "#6a9bcc"
+    property var fig: "#c46686"
+    property var heather: "#cbcadb"
+    property var cactus: "#bcd1ca"
+
+    property bool motion: conf.values["clay-motion"] !== "false"
+
+    Process { id: sys; command: "clay-sys" }
+
+    Process { id: claude; command: ["clay-claude", conf.values["claude-folder"] || "~/.claude"] }
+    property var usage: claude.state.usage || ({})
+    property var usageNow: usage.session || ({})
+    function severityColor(l) { return !l ? outline : l.severity === "critical" ? fig : l.severity === "warning" ? kraft : clay; }
+    function resetsAt(l) {
+        if (!l || !l.resets) return qsTr("reset");
+        const d = new Date(l.resets * 1000);
+        const day = d.toDateString() === now.toDateString() ? "" : d.toLocaleDateString(i18n.locale, { weekday: "short" }) + " ";
+        return qsTr("resets %1", day + hhmm(d));
+    }
+    function seenAt(t) {
+        const d = new Date(t * 1000);
+        const day = d.toDateString() === now.toDateString() ? "" : d.toLocaleDateString(i18n.locale, { weekday: "short" }) + " ";
+        return qsTr("as of %1", day + hhmm(d));
+    }
+    function barFill(l) { return Math.max(0.012, Math.min(1, ((l && l.percent) || 0) / 100)); }
+    property real busy: Math.max(0, Math.min(1, ((sys.state.cpu || 0) - 0.3) / 0.5))
+    property bool hasBattery: typeof sys.state.battery === "number" && sys.state.battery >= 0
+
+    property var now: new Date()
+    property var today: now.toDateString()
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    function hhmm(d) { return two(d.getHours()) + ":" + two(d.getMinutes()); }
+    function caps(s) { return String(s).toUpperCase(); }
+    function pct(x) { return Math.round((x || 0) * 100) + "%"; }
+    function gb(bytes) { return ((bytes || 0) / 1e9).toFixed(bytes >= 1e11 ? 0 : 1); }
+    function uptime(s) {
+        s = Math.floor(s || 0);
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+        return (d ? qsTr("%1d", d) + " " : "") + (d || h ? qsTr("%1h", h) + " " : "") + qsTr("%1m", m);
+    }
+    function roman(n) {
+        const r = [[10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+        let s = "";
+        for (const [v, l] of r) while (n >= v) { s += l; n -= v; }
+        return s;
+    }
+    function short(s, n) { s = s || ""; return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+    function greeting() {
+        const h = now.getHours(), name = sys.state.user || "";
+        const at = h < 5 ? 0 : h < 12 ? 1 : h < 18 ? 2 : h < 23 ? 3 : 4;
+        if (!name) return [qsTr("Still up?"), qsTr("Good morning."), qsTr("Good afternoon."), qsTr("Good evening."), qsTr("Good night.")][at];
+        return [qsTr("Still up, %1?", name), qsTr("Good morning, %1.", name), qsTr("Good afternoon, %1.", name),
+                qsTr("Good evening, %1.", name), qsTr("Good night, %1.", name)][at];
+    }
+    function sessions(n) { return n === 1 ? qsTr("1 session") : qsTr("%1 sessions", n); }
+    function tabs(n) { return n === 1 ? qsTr("1 tab") : qsTr("%1 tabs", n); }
+    function dayOfYear() { const s = new Date(now.getFullYear(), 0, 1); return Math.floor((new Date(today) - s) / 86400000) + 1; }
+    function week() {
+        const d = new Date(today);
+        d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+        const w1 = new Date(d.getFullYear(), 0, 4);
+        return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+    }
+    property real dayGone: (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400
+    function partOfDay() {
+        const h = now.getHours();
+        return h < 5 ? qsTr("Night") : h < 12 ? qsTr("Morning") : h < 18 ? qsTr("Afternoon") : h < 22 ? qsTr("Evening") : qsTr("Night");
+    }
+
+    property int monthShift: 0
+    property var month: {
+        const t = new Date(today), first = new Date(t.getFullYear(), t.getMonth() + monthShift, 1);
+        const start = new Date(first);
+        start.setDate(1 - (first.getDay() + 6) % 7);
+        const days = [];
+        for (let k = 0; k < 42; k++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + k);
+            days.push({ day: d.getDate(), inMonth: d.getMonth() === first.getMonth(), today: d.toDateString() === today, weekend: k % 7 > 4 });
+        }
+        return { title: first.toLocaleDateString(i18n.locale, { month: "long" }), year: first.getFullYear(), days };
+    }
+
+    property string phase: "focus"
+    property int rounds: 0
+    function length(p) { return (p === "focus" ? 25 : p === "long" ? 15 : 5) * 60; }
+    property int left: length(phase)
+    property bool ticking: false
+    function nextPhase() {
+        if (phase === "focus") { rounds += 1; phase = rounds % 4 === 0 ? "long" : "rest"; }
+        else phase = "focus";
+        left = length(phase);
+    }
+    Timer {
+        interval: 1000; running: ticking
+        onTriggered: { if (left > 1) left -= 1; else { nextPhase(); ticking = false; } }
+    }
+    function mmss(t) { return two(Math.floor(t / 60)) + ":" + two(t % 60); }
+
+    function glyphs(k) {
+        const names = { space: "Space", enter: "↩", return: "↩", tab: "⇥", escape: "⎋", esc: "⎋", backspace: "⌫", delete: "⌦",
+                        left: "←", right: "→", up: "↑", down: "↓", pageup: "⇞", pagedown: "⇟", home: "↖", end: "↘" };
+        const parts = String(k).toLowerCase().split("+");
+        const key = parts.pop();
+        let s = "";
+        if (parts.includes("ctrl") || parts.includes("control")) s += "⌃";
+        if (parts.includes("alt") || parts.includes("opt") || parts.includes("option")) s += "⌥";
+        if (parts.includes("shift") && !"?!@#$%^&*()_+{}|:\"<>~".includes(key)) s += "⇧";
+        if (parts.includes("cmd") || parts.includes("command") || parts.includes("super")) s += "⌘";
+        return s + (names[key] || key.toUpperCase());
+    }
+    function keyWhat(e) {
+        if (e.kind === "group") return qsTr("Show or hide the %1 docks", e.title);
+        if (e.kind === "bar") return qsTr("Keep %1's bar up", e.title);
+        if (e.kind === "search") return qsTr("Search from %1's bar", e.title);
+        if (e.kind === "binding") { const t = e.title.replace(/^client\./, "").split(/[._]/).join(" "); return t.charAt(0).toUpperCase() + t.slice(1); }
+        return e.title;
+    }
+    property string keyQuery: ""
+    property var keyItems: (keys.list || []).map((e) => ({ key: e.key, what: keyWhat(e), group: e.group, from: e.from }))
+    property var keyGroups: {
+        const q = keyQuery.trim().toLowerCase(), order = { rexui: 0, "init.lua": 1, rex: 2 };
+        const groups = [];
+        const at = {};
+        for (const e of keyItems.slice().sort((a, b) => (order[a.from] - order[b.from]))) {
+            if (q && !(e.what.toLowerCase().includes(q) || e.key.includes(q) || glyphs(e.key).toLowerCase().includes(q) || e.group.toLowerCase().includes(q))) continue;
+            const name = e.group || e.from;
+            if (!(name in at)) { at[name] = groups.length; groups.push({ name: name, from: e.from, items: [] }); }
+            groups[at[name]].items.push(e);
+        }
+        return groups;
+    }
+
+    property int page: 0
+    function headWidth(p) { return i18n.language === "ja" ? 34 : [48, 45, 78][p] || 48; }
+
+    Stack {
+        grow: 1
+        Shader {
+            source: "shaders/paper.metal"; running: false
+            colors: [surface, glow]
+            params: [0, 0.8, 0, 0]
+        }
+
+        Row {
+            halign: "left"; horizontalPadding: 16; spacing: 12
+            Stack {
+                width: 20; height: 20
+                Shader { source: "shaders/spark.metal"; colors: [clay]; params: [12, busy, 1, 1]; running: motion; fps: 30 }
+                Button { stateRadius: 10; onClicked: rex.run("client.palette.toggle") }
+            }
+            Stack {
+                Row {
+                    spacing: 5
+                    Text { text: rex.session || "clay"; font.family: "serif"; font.italic: true; font.size: 14; color: sessionMenu.open ? primary : ink; colorAnimation: 160 }
+                    Icon { name: "chevron.down"; font.size: 8; color: sessionMenu.open ? primary : outline; colorAnimation: 160 }
+                }
+                Button { stateRadius: 6; onClicked: sessionMenu.open = !sessionMenu.open }
+                Drawer {
+                    id: sessionMenu
+                    hover: true
+                    onOpenChanged: if (open) peek.at = 0
+                    color: surface; rounding: 18; padding: 12; animation: 360
+                    Column {
+                        width: 248; spacing: 2
+                        Row {
+                            horizontalPadding: 10; verticalPadding: 4; spacing: 6
+                            Text { text: caps(qsTr("Sessions")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                            Item { grow: 1 }
+                            Text { text: String(rex.sessions.length || 1); font.family: "serif"; font.italic: true; font.size: 12; color: outline }
+                        }
+                        List {
+                            spacing: 2; maxHeight: 340
+                            model: rex.sessions
+                            delegate: Stack {
+                                property bool hot: rowButton.hovered || endButton.hovered
+                                property bool here: modelData.id === rex.sessionId
+                                Rectangle {
+                                    radius: 10; horizontalPadding: 10; verticalPadding: 7
+                                    color: hot ? container : "transparent"; colorAnimation: 120
+                                    Row {
+                                        spacing: 10
+                                        Rectangle { width: 6; height: 6; radius: 3; color: here ? clay : hairline }
+                                        Text {
+                                            text: modelData.label || modelData.id; font.family: "serif"; font.size: 14
+                                            font.italic: !here; color: here ? ink : inkDim; colorAnimation: 120
+                                        }
+                                        Item { grow: 1 }
+                                    }
+                                }
+                                Button {
+                                    id: rowButton
+                                    stateLayer: false
+                                    onClicked: {
+                                        sessionMenu.open = false;
+                                        if (!here) rex.run("session.select", { session_id: modelData.id });
+                                    }
+                                }
+                                Row {
+                                    halign: "right"; horizontalPadding: 8
+                                    Button {
+                                        id: endButton
+                                        icon: "xmark"; font.size: 9; font.bold: true; enabled: hot
+                                        color: hovered ? clay : outline; colorAnimation: 120
+                                        opacity: hot ? 1 : 0; animate: 160; easing: "standard"
+                                        onClicked: rex.closeSession(modelData.id)
+                                    }
+                                }
+                            }
+                        }
+                        Rectangle { height: 1; color: hairline }
+                        Stack {
+                            Row {
+                                spacing: 10; horizontalPadding: 10; verticalPadding: 7
+                                Icon { name: "plus"; font.size: 10; width: 6; color: primary }
+                                Text { text: qsTr("New Session"); font.family: "serif"; font.size: 14; color: ink }
+                                Item { grow: 1 }
+                            }
+                            Button { stateRadius: 10; onClicked: { sessionMenu.open = false; rex.run("session.new"); } }
+                        }
+                    }
+                }
+            }
+            Rectangle { width: 1; height: 14; color: hairline }
+            Stack {
+                width: Math.max(1, rex.tabs) * 30; height: 26; animate: 240; easing: "standard"
+                Grid {
+                    columns: Math.max(1, rex.tabs)
+                    model: rex.tabs
+                    delegate: Stack {
+                        width: 30; height: 26
+                        Column {
+                            halign: "center"; valign: "center"; spacing: 1
+                            Text {
+                                text: roman(index + 1); align: "center"; font.family: "serif"; font.size: 14
+                                font.italic: index !== rex.tab - 1
+                                color: index === rex.tab - 1 ? primary : inkDim; colorAnimation: 140
+                            }
+                            Rectangle { width: index === rex.tab - 1 ? 14 : 0; height: 1.5; radius: 0.75; color: clay; animate: 260; easing: "standard" }
+                        }
+                        Button {
+                            stateRadius: 6
+                            onHoveredChanged: {
+                                if (hovered) { sessionMenu.open = false; peek.at = index + 1; }
+                                else if (peek.at === index + 1) peek.at = 0;
+                            }
+                            onClicked: {
+                                peek.open = false;
+                                peek.seen = 0;
+                                if (index !== rex.tab - 1) rex.run("client.tab.goto", { index: index + 1 });
+                            }
+                        }
+                    }
+                }
+                Drawer {
+                    id: peek
+                    property int at: 0
+                    property int seen: 0
+                    property bool want: !sessionMenu.open && ((at > 0 && at !== rex.tab && at <= rex.tabs) || (open && peekOver.hovered && seen > 0 && seen !== rex.tab))
+                    onAtChanged: if (at > 0 && at !== rex.tab && at <= rex.tabs) seen = at
+                    property int tabNow: rex.tab
+                    onTabNowChanged: { at = 0; peekOff.running = false; open = false; }
+                    onWantChanged: {
+                        peekOff.running = false;
+                        if (want) open = true;
+                        else peekOff.running = true;
+                    }
+                    shift: seen > 0 ? (seen - 0.5 - rex.tabs / 2) * 30 : 0
+                    animation: 320
+                    color: surface; rounding: 18; padding: 10; spacing: 8
+                    Stack {
+                        Button {
+                            id: peekOver; stateLayer: false; focusable: false
+                            onClicked: {
+                                const t = peek.seen;
+                                peek.open = false;
+                                peek.seen = 0;
+                                if (t > 0 && t !== rex.tab) rex.run("client.tab.goto", { index: t });
+                            }
+                        }
+                        Column {
+                            spacing: 8
+                            TabPreview { width: peekWidth; tab: peek.seen; radius: 10 }
+                            Row {
+                                width: peekWidth; horizontalPadding: 4; spacing: 8
+                                Text { text: roman(peek.seen || 1); font.family: "serif"; font.italic: true; font.size: 13; color: primary }
+                                Text { width: peekWidth - 48; text: rex.titles[peek.seen - 1] || ""; font.size: 12; color: inkDim }
+                            }
+                        }
+                    }
+                }
+                Timer { id: peekOff; interval: 160; repeat: false; running: false; onTriggered: { running = false; if (!peek.want) peek.open = false; } }
+            }
+        }
+
+        Row {
+            halign: "center"
+            Stack {
+                Rectangle {
+                    radius: 8; horizontalPadding: 12; verticalPadding: 3
+                    color: desk.open ? container : "transparent"; colorAnimation: 160
+                    Row {
+                        spacing: 10
+                        Text { text: now.toLocaleDateString(i18n.locale, { weekday: "long", day: "numeric", month: "long" }); font.family: "serif"; font.size: 14; color: ink }
+                        Text { text: hhmm(now); font.family: "serif"; font.size: 14; font.tabular: true; color: primary }
+                    }
+                }
+                Button { stateRadius: 8; onClicked: desk.open = !desk.open }
+
+                Drawer {
+                    id: desk
+                    hover: true; key: "cmd+shift+space"; keyTitle: qsTr("The Desk")
+                    color: surface; rounding: 22; animation: 460
+                    opening: "grow"; closeAnimation: 330
+                    property bool built: false
+                    onOpenChanged: if (open) built = true
+
+                    Stack {
+                        Shader {
+                            source: "shaders/contour.metal"; running: motion; fps: 24
+                            colors: [light ? "#26141413" : "#22faf9f5", clay]
+                            params: [14, 240, 0.012, 0.75, 0.85]
+                        }
+                        Loader {
+                            active: desk.open || desk.built
+                            delegate: Column {
+                                width: 844; padding: 28; spacing: 20
+
+                                Row {
+                                    spacing: 24
+                                    Column {
+                                        grow: 1; spacing: 6
+                                        Text {
+                                            text: caps(now.toLocaleDateString(i18n.locale, { weekday: "long", day: "numeric", month: "long" }))
+                                            font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary
+                                        }
+                                        Text { text: greeting(); font.family: "serif"; font.size: 34; color: ink; colorAnimation: 200 }
+                                        Text {
+                                            text: [sessions(rex.sessions.length || 1), tabs(rex.tabs), qsTr("up %1", uptime(sys.state.uptime))].join("  ·  ")
+                                            font.size: 13; color: inkDim
+                                        }
+                                    }
+                                    Stack {
+                                        width: 84; height: 84
+                                        Shader { source: "shaders/spark.metal"; colors: [clay, kraft]; params: [12, busy, 1.5, 1]; running: motion }
+                                    }
+                                }
+
+                                Rectangle {
+                                    radius: 12; color: container; border.width: 1; border.color: hairline
+                                    horizontalPadding: 18; verticalPadding: 14
+                                    Row {
+                                        spacing: 28
+                                        Column {
+                                            width: 128; spacing: 4
+                                            Text { text: caps(qsTr("Claude usage")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                            Text { visible: !!usage.fetched; text: seenAt(usage.fetched); font.size: 11; color: outline }
+                                        }
+                                        Text { visible: !usage.session && !usage.weekly; grow: 1; text: qsTr("Nothing yet: Claude Code saves it as it runs."); font.size: 12; color: outline }
+                                        Column {
+                                            visible: !!usage.session; grow: 1; spacing: 7
+                                            Row {
+                                                spacing: 8; valign: "bottom"
+                                                Text { text: qsTr("5 hours"); font.size: 12; color: inkDim }
+                                                Text { text: resetsAt(usage.session); font.size: 10.5; color: outline }
+                                                Item { grow: 1 }
+                                                Text { text: Math.round((usage.session || {}).percent || 0) + "%"; font.family: "serif"; font.size: 17; font.tabular: true; color: (usage.session || {}).severity === "critical" ? fig : ink }
+                                            }
+                                            Stack {
+                                                height: 4
+                                                Rectangle { radius: 2; color: hairline }
+                                                Row {
+                                                    Rectangle { grow: barFill(usage.session); height: 4; radius: 2; animate: 600; easing: "standard"; color: severityColor(usage.session) }
+                                                    Item { grow: 1 - barFill(usage.session) }
+                                                }
+                                            }
+                                        }
+                                        Column {
+                                            visible: !!usage.weekly; grow: 1; spacing: 7
+                                            Row {
+                                                spacing: 8; valign: "bottom"
+                                                Text { text: qsTr("Week"); font.size: 12; color: inkDim }
+                                                Text { text: resetsAt(usage.weekly); font.size: 10.5; color: outline }
+                                                Item { grow: 1 }
+                                                Text { text: Math.round((usage.weekly || {}).percent || 0) + "%"; font.family: "serif"; font.size: 17; font.tabular: true; color: (usage.weekly || {}).severity === "critical" ? fig : ink }
+                                            }
+                                            Stack {
+                                                height: 4
+                                                Rectangle { radius: 2; color: hairline }
+                                                Row {
+                                                    Rectangle { grow: barFill(usage.weekly); height: 4; radius: 2; animate: 600; easing: "standard"; color: severityColor(usage.weekly) }
+                                                    Item { grow: 1 - barFill(usage.weekly) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 8
+                                    Row {
+                                        halign: "left"
+                                        Grid {
+                                            columns: 3; width: 336
+                                            model: [qsTr("Today"), qsTr("Focus"), qsTr("Colophon")]
+                                            delegate: Stack {
+                                                width: 112; height: 28
+                                                Stack {
+                                                    halign: "center"; valign: "center"
+                                                    Text { text: modelData; font.family: "serif"; font.size: 17; font.italic: page !== index; color: page === index ? ink : outline; colorAnimation: 160 }
+                                                }
+                                                Button { stateLayer: false; onClicked: page = index }
+                                            }
+                                        }
+                                    }
+                                    Stack {
+                                        height: 3
+                                        Column { valign: "center"; Rectangle { height: 1; color: hairline } }
+                                        Row {
+                                            Item { width: page * 112 + (112 - headWidth(page)) / 2 }
+                                            Rectangle { width: headWidth(page); height: 3; radius: 1.5; color: clay; animate: 360; easing: "standard" }
+                                        }
+                                    }
+                                }
+
+                                Pages {
+                                    current: page; spacing: 48; animation: 420
+
+                                    Row {
+                                        width: 788; spacing: 16; valign: "stretch"
+
+                                        Rectangle {
+                                            width: 252; radius: 14; color: container; padding: 18
+                                            border.width: 1; border.color: hairline
+                                            Column {
+                                                spacing: 12
+                                                Row {
+                                                    spacing: 6
+                                                    Text { text: month.title; font.family: "serif"; font.size: 18; color: ink; colorAnimation: 160 }
+                                                    Text { text: String(month.year); font.family: "serif"; font.italic: true; font.size: 18; color: outline }
+                                                    Item { grow: 1 }
+                                                    Button { icon: "chevron.left"; font.size: 11; color: inkDim; onClicked: monthShift -= 1 }
+                                                    Button { icon: "circle.fill"; font.size: 5; color: monthShift ? clay : hairline; enabled: monthShift !== 0; onClicked: monthShift = 0 }
+                                                    Button { icon: "chevron.right"; font.size: 11; color: inkDim; onClicked: monthShift += 1 }
+                                                }
+                                                Grid {
+                                                    columns: 7
+                                                    model: i18n.language === "ja" ? ["月", "火", "水", "木", "金", "土", "日"] : ["M", "T", "W", "T", "F", "S", "S"]
+                                                    delegate: Text { text: modelData; align: "center"; font.size: 10; font.weight: "semibold"; font.letterSpacing: 0.8; color: index > 4 ? primary : outline }
+                                                }
+                                                Grid {
+                                                    columns: 7; spacing: 2
+                                                    model: month.days
+                                                    delegate: Stack {
+                                                        height: 28; halign: "center"; valign: "center"
+                                                        Rectangle { width: 26; height: 26; radius: 13; color: modelData.today ? clay : "transparent" }
+                                                        Text {
+                                                            text: String(modelData.day); align: "center"; font.family: "serif"; font.size: 13; font.tabular: true
+                                                            color: modelData.today ? onPrimary : !modelData.inMonth ? outline : ink
+                                                            opacity: modelData.inMonth ? 1 : 0.45
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            width: 252; radius: 14; color: container
+                                            border.width: 1; border.color: hairline
+                                            Column {
+                                                spacing: 0
+                                                Stack {
+                                                    height: 150
+                                                    Shader {
+                                                        source: "shaders/halftone.metal"; running: false
+                                                        params: [dayGone, 6, 0.82]
+                                                        colors: [clay, heather, light ? "#40141413" : "#40faf9f5"]
+                                                    }
+                                                }
+                                                Column {
+                                                    padding: 18; spacing: 6
+                                                    Text { text: caps(partOfDay()); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                                    Text { text: hhmm(now); font.family: "serif"; font.size: 40; font.tabular: true; color: ink }
+                                                    Text { text: qsTr("%1% of the day gone", Math.round(dayGone * 100)); font.size: 12; color: inkDim }
+                                                    Text { text: qsTr("Day %1 · Week %2", dayOfYear(), week()); font.size: 12; color: outline }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            width: 252; radius: 14; color: container; padding: 18
+                                            border.width: 1; border.color: hairline
+                                            Column {
+                                                spacing: 14
+                                                Text { text: caps(qsTr("This Mac")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                                Grid {
+                                                    columns: 1; spacing: 14
+                                                    model: [
+                                                        { label: qsTr("Processor"), value: sys.state.cpu || 0, text: pct(sys.state.cpu), unit: "" },
+                                                        { label: qsTr("Memory"), value: sys.state.mem || 0, text: gb(sys.state.memUsed), unit: qsTr("of %1 GB", gb(sys.state.memTotal)) },
+                                                        { label: qsTr("Disk"), value: sys.state.disk || 0, text: gb(sys.state.diskUsed), unit: qsTr("of %1 GB", gb(sys.state.diskTotal)) },
+                                                    ]
+                                                    delegate: Column {
+                                                        spacing: 5
+                                                        Row {
+                                                            spacing: 6; valign: "bottom"
+                                                            Text { text: modelData.label; font.size: 12; color: inkDim }
+                                                            Item { grow: 1 }
+                                                            Text { text: modelData.text; font.family: "serif"; font.size: 20; font.tabular: true; color: ink }
+                                                            Text { text: modelData.unit; font.size: 11; color: outline; visible: !!modelData.unit }
+                                                        }
+                                                        Stack {
+                                                            height: 3
+                                                            Rectangle { radius: 1.5; color: hairline }
+                                                            Row {
+                                                                Rectangle {
+                                                                    width: Math.max(3, 216 * modelData.value); height: 3; radius: 1.5; animate: 600; easing: "standard"
+                                                                    color: modelData.value > 0.9 ? fig : clay
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Rectangle { height: 1; color: hairline }
+                                                Column {
+                                                    spacing: 3
+                                                    Text {
+                                                        visible: hasBattery
+                                                        text: qsTr("Battery %1", pct(sys.state.battery)) + (sys.state.charging ? " · " + qsTr("charging") : "")
+                                                        font.size: 12; color: inkDim
+                                                    }
+                                                    Text { text: (sys.state.host || "") + " · " + (sys.state.os || ""); font.size: 12; color: inkDim }
+                                                    Text { text: qsTr("Up %1", uptime(sys.state.uptime)); font.size: 12; color: outline }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Row {
+                                        width: 788; spacing: 56; halign: "center"; valign: "center"; verticalPadding: 12
+                                        Stack {
+                                            width: 208; height: 208
+                                            Shader {
+                                                source: "shaders/vessel.metal"; running: motion; fps: 30
+                                                params: [0.08 + 0.84 * left / length(phase), ticking ? 1 : 0.45, 1]
+                                                colors: phase === "focus" ? [clay, fig, manilla, outline, containerHigh] : [olive, cactus, manilla, outline, containerHigh]
+                                            }
+                                        }
+                                        Column {
+                                            spacing: 10
+                                            Text {
+                                                text: caps(phase === "focus" ? qsTr("Focus") : phase === "long" ? qsTr("A long rest") : qsTr("Rest"))
+                                                font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: phase === "focus" ? primary : olive
+                                            }
+                                            Text { text: mmss(left); font.family: "serif"; font.size: 64; font.tabular: true; color: ink }
+                                            Text {
+                                                text: ticking ? (phase === "focus" ? qsTr("One thing at a time.") : qsTr("Step away from the screen.")) : qsTr("Paused.")
+                                                font.family: "serif"; font.italic: true; font.size: 15; color: inkDim
+                                            }
+                                            Item { height: 8 }
+                                            Row {
+                                                spacing: 8
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 108; height: 36; radius: 18; halign: "center"; valign: "center"
+                                                        color: ticking ? containerHigh : clay; colorAnimation: 160
+                                                        Text { text: ticking ? qsTr("Pause") : left < length(phase) ? qsTr("Resume") : qsTr("Begin"); font.size: 13; font.weight: "medium"; color: ticking ? ink : onPrimary }
+                                                    }
+                                                    Button { stateRadius: 18; stateColor: ticking ? ink : onPrimary; onClicked: ticking = !ticking }
+                                                }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 80; height: 36; radius: 18; halign: "center"; valign: "center"; border.width: 1; border.color: hairline
+                                                        Text { text: qsTr("Skip"); font.size: 13; color: inkDim }
+                                                    }
+                                                    Button { stateRadius: 18; onClicked: nextPhase() }
+                                                }
+                                                Stack {
+                                                    Rectangle {
+                                                        width: 80; height: 36; radius: 18; halign: "center"; valign: "center"; border.width: 1; border.color: hairline
+                                                        Text { text: qsTr("Reset"); font.size: 13; color: inkDim }
+                                                    }
+                                                    Button { stateRadius: 18; onClicked: { ticking = false; phase = "focus"; left = length("focus"); } }
+                                                }
+                                            }
+                                            Row {
+                                                spacing: 8
+                                                Text { text: qsTr("Rounds"); font.size: 12; color: outline }
+                                                Grid {
+                                                    columns: 4; spacing: 5
+                                                    model: 4
+                                                    delegate: Rectangle { width: 7; height: 7; radius: 3.5; color: index < (rounds ? rounds % 4 || 4 : 0) ? clay : hairline; colorAnimation: 240 }
+                                                }
+                                                Text { visible: rounds > 4; text: String(rounds); font.family: "serif"; font.italic: true; font.size: 13; color: outline }
+                                            }
+                                        }
+                                    }
+
+                                    Column {
+                                        spacing: 18; width: 788
+                                        Row {
+                                            spacing: 32
+                                            Column {
+                                                spacing: 10; width: 360
+                                                Text { text: caps(qsTr("Palette")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                                Grid {
+                                                    columns: 5; spacing: 10
+                                                    model: [
+                                                        { name: "Ivory", hex: "#faf9f5" }, { name: "Slate", hex: "#141413" }, { name: "Clay", hex: "#d97757" },
+                                                        { name: "Kraft", hex: "#d4a27f" }, { name: "Manilla", hex: "#ebdbbc" }, { name: "Olive", hex: "#788c5d" },
+                                                        { name: "Sky", hex: "#6a9bcc" }, { name: "Fig", hex: "#c46686" }, { name: "Heather", hex: "#cbcadb" },
+                                                        { name: "Cactus", hex: "#bcd1ca" },
+                                                    ]
+                                                    delegate: Column {
+                                                        spacing: 4
+                                                        Rectangle { height: 40; radius: 8; color: modelData.hex; border.width: 1; border.color: hairline }
+                                                        Text { text: modelData.name; font.family: "serif"; font.size: 12; color: ink }
+                                                        Text { text: modelData.hex.slice(1).toUpperCase(); font.mono: true; font.size: 9; color: outline }
+                                                    }
+                                                }
+                                            }
+                                            Column {
+                                                grow: 1; spacing: 10
+                                                Text { text: caps(qsTr("Type")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                                Row {
+                                                    spacing: 14
+                                                    Text { text: "Aa"; font.family: "serif"; font.size: 44; color: ink; width: 70 }
+                                                    Column { spacing: 2; Text { text: qsTr("Serif, to read"); font.size: 13; color: ink }; Text { text: qsTr("New York, in Tiempos' place"); font.size: 11; color: outline } }
+                                                }
+                                                Row {
+                                                    spacing: 14
+                                                    Text { text: "Aa"; font.size: 40; font.weight: "medium"; color: ink; width: 70 }
+                                                    Column { spacing: 2; Text { text: qsTr("Sans, to work"); font.size: 13; color: ink }; Text { text: qsTr("SF Pro, in Styrene's place"); font.size: 11; color: outline } }
+                                                }
+                                                Row {
+                                                    spacing: 14
+                                                    Text { text: "{ }"; font.mono: true; font.size: 30; color: ink; width: 70 }
+                                                    Column { spacing: 2; Text { text: qsTr("Mono, for code"); font.size: 13; color: ink }; Text { text: qsTr("SF Mono"); font.size: 11; color: outline } }
+                                                }
+                                            }
+                                        }
+                                        Column {
+                                            spacing: 10
+                                            Text { text: caps(qsTr("Shaders")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                            Row {
+                                                spacing: 12
+                                                Column {
+                                                    spacing: 6
+                                                    Rectangle { width: 148; height: 84; radius: 10; border.width: 1; border.color: hairline
+                                                        Shader { source: "shaders/paper.metal"; running: false; colors: [surface, glow]; params: [0.6, 1.4, 0.6, 0] } }
+                                                    Text { text: qsTr("Paper"); font.family: "serif"; font.size: 13; color: ink }
+                                                }
+                                                Column {
+                                                    spacing: 6
+                                                    Rectangle { width: 148; height: 84; radius: 10; color: container; border.width: 1; border.color: hairline; halign: "center"; valign: "center"
+                                                        Stack { width: 64; height: 64; Shader { source: "shaders/spark.metal"; colors: [clay]; params: [12, 1, 2, 1]; running: motion; fps: 30 } } }
+                                                    Text { text: qsTr("Spark"); font.family: "serif"; font.size: 13; color: ink }
+                                                }
+                                                Column {
+                                                    spacing: 6
+                                                    Rectangle { width: 148; height: 84; radius: 10; color: container; border.width: 1; border.color: hairline
+                                                        Shader { source: "shaders/contour.metal"; running: motion; fps: 24; colors: [light ? "#55141413" : "#55faf9f5", clay]; params: [12, 90, 0.05, 0.7] } }
+                                                    Text { text: qsTr("Contour"); font.family: "serif"; font.size: 13; color: ink }
+                                                }
+                                                Column {
+                                                    spacing: 6
+                                                    Rectangle { width: 148; height: 84; radius: 10; color: container; border.width: 1; border.color: hairline
+                                                        Shader { source: "shaders/halftone.metal"; running: false; params: [0.4, 4, 0.85]; colors: [clay, heather, hairline] } }
+                                                    Text { text: qsTr("Daylight"); font.family: "serif"; font.size: 13; color: ink }
+                                                }
+                                                Column {
+                                                    spacing: 6
+                                                    Rectangle { width: 148; height: 84; radius: 10; color: container; border.width: 1; border.color: hairline; halign: "center"; valign: "center"
+                                                        Stack { width: 70; height: 70; Shader { source: "shaders/vessel.metal"; running: motion; fps: 30; params: [0.55, 1.4, 1]; colors: [sky, heather, manilla, hairline, surface] } } }
+                                                    Text { text: qsTr("Vessel"); font.family: "serif"; font.size: 13; color: ink }
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            text: qsTr("clay: a rexui distro after Anthropic's design. Ivory and slate, clay for what's live; hairlines, not boxes; things settle, they don't bounce.")
+                                            wrap: true; font.family: "serif"; font.italic: true; font.size: 13; color: inkDim
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Item {
+            width: 1; height: 1
+            Drawer {
+                id: whichKey
+                lazy: true
+                placement: "center"; width: 820; height: 640
+                key: "cmd+shift+?"; keyTitle: qsTr("Which key")
+                color: surface; rounding: 14; animation: 340
+                onOpenChanged: if (open) { keyQuery = ""; keyFind.forceActiveFocus(); }
+                Stack {
+                    grow: 1
+                    Shader {
+                        source: "shaders/contour.metal"; running: motion && whichKey.open; fps: 24
+                        colors: [light ? "#24141413" : "#20faf9f5", clay]
+                        params: [18, 300, 0.009, 0.7, 0.9]
+                    }
+                    Shader { source: "shaders/paper.metal"; running: false; colors: ["#00000000", glow]; params: [0, 0.6, 0.35, 0] }
+                    Column {
+                        padding: 36; spacing: 22
+
+                        Column {
+                            spacing: 6
+                            Row {
+                                spacing: 10; valign: "bottom"
+                                Text { text: caps(qsTr("Which key")); font.size: 10.5; font.weight: "semibold"; font.letterSpacing: 1.4; color: primary }
+                                Item { grow: 1 }
+                                Text { text: qsTr("%1 keys", keyItems.length); font.family: "serif"; font.italic: true; font.size: 13; color: outline }
+                                Stack {
+                                    width: 26; height: 26
+                                    Rectangle { radius: 13; color: closeKeys.hovered ? containerHigh : "transparent"; colorAnimation: 120; halign: "center"; valign: "center"
+                                        Icon { name: "xmark"; font.size: 10; font.bold: true; color: closeKeys.hovered ? ink : outline; colorAnimation: 120 } }
+                                    Button { id: closeKeys; stateLayer: false; onClicked: whichKey.open = false }
+                                }
+                            }
+                            Text { text: qsTr("Every key, and what it does."); font.family: "serif"; font.size: 32; color: ink }
+                        }
+                        Column {
+                            spacing: 8
+                            Row {
+                                spacing: 10
+                                Icon { name: "magnifyingglass"; font.size: 13; color: keyQuery ? primary : outline; colorAnimation: 160 }
+                                TextField {
+                                    id: keyFind; grow: 1; text: keyQuery; autofocus: true
+                                    placeholder: qsTr("Find a key, or what it does"); font.family: "serif"; font.size: 16; color: ink
+                                    onTextChanged: keyQuery = text
+                                    onCancelled: whichKey.open = false
+                                }
+                            }
+                            Rectangle { height: 1; color: keyQuery ? clay : hairline; colorAnimation: 160 }
+                        }
+
+                        List {
+                            grow: 1; spacing: 30; fade: 0.04
+                            model: keyGroups
+                            delegate: Row {
+                                spacing: 32; valign: "top"
+                                Column {
+                                    width: 168; spacing: 5; verticalPadding: 8
+                                    Row {
+                                        spacing: 8
+                                        Rectangle { width: 6; height: 6; radius: 3; color: modelData.from === "rex" ? sky : modelData.from === "init.lua" ? olive : clay }
+                                        Text { text: modelData.name; font.family: "serif"; font.italic: true; font.size: 17; color: ink; wrap: true; width: 150 }
+                                    }
+                                    Text {
+                                        text: caps(modelData.from === "rex" ? qsTr("Rex's menus") : modelData.from === "init.lua" ? "init.lua" : qsTr("clay"))
+                                        font.size: 9; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline
+                                    }
+                                }
+                                Grid {
+                                    grow: 1; columns: 1; spacing: 0
+                                    model: modelData.items
+                                    delegate: Column {
+                                        spacing: 0
+                                        Rectangle { height: 1; color: hairline; visible: index > 0 }
+                                        Row {
+                                            spacing: 12; verticalPadding: 8
+                                            Text { text: modelData.what; font.family: "serif"; font.size: 15; color: ink }
+                                            Item { grow: 1 }
+                                            Rectangle {
+                                                radius: 4; horizontalPadding: 7; verticalPadding: 3; color: containerHigh
+                                                Text { text: glyphs(modelData.key); font.size: 12; font.tabular: true; font.letterSpacing: 0.8; color: inkDim }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Column {
+                            spacing: 10
+                            Rectangle { height: 1; color: hairline }
+                            Row {
+                                spacing: 18
+                                Row { spacing: 6; Rectangle { width: 6; height: 6; radius: 3; color: clay }; Text { text: qsTr("clay's docks"); font.size: 11; color: outline } }
+                                Row { spacing: 6; Rectangle { width: 6; height: 6; radius: 3; color: olive }; Text { text: "init.lua"; font.size: 11; color: outline } }
+                                Row { spacing: 6; Rectangle { width: 6; height: 6; radius: 3; color: sky }; Text { text: qsTr("Rex's menus"); font.size: 11; color: outline } }
+                                Item { grow: 1 }
+                                Text { text: qsTr("esc closes"); font.family: "serif"; font.italic: true; font.size: 12; color: outline }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Row {
+            halign: "right"; horizontalPadding: 16; spacing: 18
+            Stack {
+                visible: !!usage.session
+                Row {
+                    spacing: 6
+                    Text { text: "CLAUDE"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: outline }
+                    Text { text: Math.round(usageNow.percent || 0) + "%"; font.size: 12; font.tabular: true; color: usageNow.severity === "critical" ? fig : usageNow.severity === "warning" ? kraft : ink; colorAnimation: 300 }
+                }
+                Button { stateRadius: 6; onClicked: desk.open = !desk.open }
+            }
+            Row {
+                spacing: 6
+                Text { text: "CPU"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: outline }
+                Text { text: pct(sys.state.cpu); font.size: 12; font.tabular: true; color: busy > 0 ? primary : ink; colorAnimation: 300 }
+            }
+            Row {
+                spacing: 6
+                Text { text: "MEM"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: outline }
+                Text { text: gb(sys.state.memUsed) + " GB"; font.size: 12; font.tabular: true; color: ink }
+            }
+            Row {
+                spacing: 6
+                Text { text: "DISK"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: outline }
+                Text { text: pct(sys.state.disk); font.size: 12; font.tabular: true; color: (sys.state.disk || 0) > 0.9 ? fig : ink }
+            }
+            Row {
+                visible: hasBattery
+                spacing: 6
+                Icon { name: sys.state.charging ? "battery.100.bolt" : "battery.75"; font.size: 12; color: (sys.state.battery || 1) < 0.2 ? fig : inkDim }
+                Text { text: pct(sys.state.battery); font.size: 12; font.tabular: true; color: ink }
+            }
+        }
+    }
+}

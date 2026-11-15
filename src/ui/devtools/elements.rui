@@ -1,0 +1,8 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Dock {
+    side: debug.options["dock elements.rui"] || "left"; width: 380; height: 320; padding: 0; spacing: 0
+    title: "Elements"; icon: "square.stack.3d.down.right"
+    visible: debug.here.pane || (debug.enabled && !debug.options["hidden elements.rui"] && !(debug.panedFiles || []).includes("elements.rui"))
+    ElementsPanel { grow: 1 }
+}

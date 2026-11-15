@@ -1,0 +1,58 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Dock {
+    side: "top-right"; width: 164; height: 46; margin: 10; padding: 0
+    visible: !!debug.options.fps
+
+    property var T: debug.theme || ({})
+    property bool dark: T.dark !== undefined ? !!T.dark : theme.dark
+    property var bg: T.bg || (dark ? "#f0131418" : "#f4f6f6f8")
+    property var raised: T.raised || (dark ? "#1d1f24" : "#ffffff")
+    property var hover: T.hover || (dark ? "#24272d" : "#eceef1")
+    property var line: T.line || (dark ? "#2a2d34" : "#dcdee2")
+    property var field: T.field || (dark ? "#15171b" : "#f0f1f3")
+    property var ink: T.ink || (dark ? "#e3e5e8" : "#1d1f23")
+    property var dim: T.dim || (dark ? "#8b9099" : "#6b7079")
+    property var faint: T.faint || (dark ? "#5c616b" : "#a3a7ae")
+    property var blue: T.accent || "#4f8cff"
+    property var onBlue: T.onAccent || "#ffffff"
+    property var selColor: T.selected || (dark ? "#1f3a66" : "#dbe7ff")
+    property var tagColor: T.tag || (dark ? "#c792ea" : "#8b3fc6")
+    property var idColor: T.id || (dark ? "#82aaff" : "#2f5fd0")
+    property var compColor: T.comp || (dark ? "#ffcb6b" : "#a86b00")
+    property var strColor: T.string || (dark ? "#c3e88d" : "#3c7a1d")
+    property var numColor: T.number || (dark ? "#f78c6c" : "#b4501e")
+    property var warnColor: T.warn || (dark ? "#ffcb6b" : "#a86b00")
+    property var errColor: T.error || "#ff5f56"
+    property var okColor: T.ok || (dark ? "#c3e88d" : "#3c7a1d")
+    property string uiFont: T.font || ""
+    property string monoFont: T.mono || ""
+    property real r: T.radius !== undefined ? Number(T.radius) : 6
+    property int fps: visible ? rex.fps : 0
+    property var seen: []
+    onFpsChanged: if (fps > 0) seen = seen.concat([fps]).slice(-40)
+    onVisibleChanged: if (!visible) seen = []
+    property real most: Math.max(60, ...seen)
+    property var bars: seen.map((f) => ({ h: Math.max(1, 18 * f / most), c: f >= most * 0.9 ? dim : f >= most * 0.5 ? warnColor : errColor }))
+
+    Rectangle {
+        grow: 1; radius: r + 4; color: bg; border.width: 1; border.color: line
+        horizontalPadding: 10; verticalPadding: 6
+        Row {
+            spacing: 8
+            Column {
+                valign: "center"; width: 36
+                Text { font.family: monoFont;
+                    text: fps ? String(fps) : "…"; font.mono: true; font.size: 15; font.weight: "semibold"
+                    color: !fps || fps >= most * 0.9 ? ink : fps >= most * 0.5 ? warnColor : errColor; colorAnimation: 200
+                }
+                Text { font.family: monoFont; text: "fps"; font.mono: true; font.size: 9; color: faint }
+            }
+            Grid {
+                grow: 1; valign: "center"; columns: 40; spacing: 1; height: 18
+                model: bars
+                delegate: Stack { width: 1.5; height: 18; valign: "bottom"; Rectangle { height: modelData.h; radius: 0.75; color: modelData.c } }
+            }
+        }
+    }
+}

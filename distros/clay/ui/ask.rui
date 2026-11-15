@@ -1,0 +1,502 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "bottom-left"; width: 64; height: 64; margin: 0
+    reveal: 120
+    color: "transparent"; resizable: false
+    title: qsTr("Ask Claude")
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var primary: pal[4]
+    property var onPrimary: pal[5]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+    property var glow: light ? "#f6d9c9" : "#4a2a1e"
+    property var clay: "#d97757"
+    property var kraft: "#d4a27f"
+    property var fig: "#c46686"
+    property bool motion: conf.values["clay-motion"] !== "false"
+    property var devTheme: ({
+        dark: !light, bg: surface, raised: container, hover: containerHigh, line: containerHighest, field: surface,
+        ink: ink, dim: inkDim, faint: outline, accent: clay, onAccent: "#ffffff", selected: glow,
+        tag: fig, id: clay, comp: kraft, string: light ? "#5f7a3c" : "#a9bc85", number: light ? "#9a5b2f" : "#e0a77c",
+        warn: light ? "#a8722a" : "#d4a27f", error: light ? "#b4402a" : "#e5735a", ok: light ? "#5f7a3c" : "#a9bc85",
+        errorRow: light ? "#f7e3dc" : "#3a2420", warnRow: light ? "#f5ead7" : "#33291c", radius: 8,
+    })
+    onDevThemeChanged: debug.setTheme(devTheme)
+
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    function hhmm(d) { return two(d.getHours()) + ":" + two(d.getMinutes()); }
+
+    Process {
+        id: claude
+        command: ["clay-claude", conf.values["claude-folder"] || "~/.claude"]
+        onMessage: {
+            if (!message) return;
+            if (message.asked && message.asked.id === asked) liveQ = message.asked.text;
+            else if (message.delta && message.delta.id === asked) live += message.delta.text;
+            else if (message.done && message.done.id === asked) {
+                talk = talk.concat([{ q: liveQ, a: live, error: message.done.error || "" }]);
+                live = ""; liveQ = "";
+            } else if (message.opened) {
+                if (message.opened.tab) goTab = message.opened.tab;
+                else if (message.opened.session) goSession = message.opened.session;
+            } else if (message.error) error = message.error;
+        }
+    }
+    property var usage: claude.state.usage || ({})
+    property bool thinking: !!claude.state.thinking
+
+    property string mode: "inline"
+    property var talk: []
+    property string liveQ: ""
+    property string live: ""
+    property int asked: 0
+    property string error: ""
+
+    property int goTab: 0
+    property string goSession: ""
+    property bool tabThere: goTab > 0 && rex.tabs >= goTab
+    onTabThereChanged: if (tabThere) { rex.run("client.tab.goto", { index: goTab }); goTab = 0; }
+    property bool sessionThere: !!goSession && rex.sessions.some((s) => s.id === goSession)
+    onSessionThereChanged: if (sessionThere) { rex.run("session.select", { session_id: goSession }); goSession = ""; }
+
+    function send() {
+        const t = field.text.trim();
+        error = "";
+        if (mode === "inline") {
+            if (!t || thinking) return;
+            asked += 1;
+            liveQ = t; live = "";
+            claude.send({ inline: { id: asked, text: t } });
+        } else {
+            claude.send({ ask: { text: t, session: rex.sessionId, new: mode, cwd: "~" } });
+            win.open = false;
+        }
+        field.text = "";
+    }
+    function keyOf(title) { const e = (keys.list || []).find((k) => k.from === "rex" && k.title === title); return e ? e.key : ""; }
+    property var menuItems: [
+        { id: "ask", spark: true, enabled: true, title: context.hasSelection ? qsTr("Ask Claude about this") : qsTr("Ask Claude…"), key: context.hasSelection ? "" : "cmd+shift+k" },
+        { separator: true },
+        { id: "copy", icon: "doc.on.doc", title: qsTr("Copy"), enabled: !!context.hasSelection, key: "cmd+c" },
+        { id: "paste", icon: "doc.on.clipboard", title: qsTr("Paste"), enabled: true, key: "cmd+v" },
+        { separator: true },
+        { id: "pane.split.right", icon: "rectangle.split.2x1", title: qsTr("Split Right"), enabled: true, key: keyOf("Split Right") },
+        { id: "pane.split.down", icon: "rectangle.split.1x2", title: qsTr("Split Down"), enabled: true, key: keyOf("Split Down") },
+        { id: "pane.float", icon: "macwindow.on.rectangle", title: qsTr("Float Pane"), enabled: true, key: keyOf("Float Pane") },
+        { id: "pane.zoom", icon: "arrow.up.left.and.arrow.down.right", title: qsTr("Zoom Pane"), enabled: true, key: keyOf("Zoom Pane") },
+        { separator: true },
+        { id: "com.superlogical.terminal.clear", icon: "eraser", title: qsTr("Clear"), enabled: true, key: "" },
+        { id: "com.superlogical.terminal.reset", icon: "arrow.counterclockwise", title: qsTr("Reset Terminal"), enabled: true, key: keyOf("Reset Terminal") },
+        { id: "pane.close", icon: "xmark", title: qsTr("Close Pane"), enabled: true, key: keyOf("Close Pane") },
+    ]
+    property string menuBlock: (context.block && context.block.block) || ""
+    property var menuPane: (panes.list || []).find((p) => p.id === menuBlock) || null
+    property string menuBg: (menuPane && menuPane.data && menuPane.data.bg) || conf.values["clay-pane-background"] || "contour"
+    property bool hasPicture: !!(conf.values["clay-pane-image"] || conf.values["background-gif"])
+    property var bgChoices: [
+        { v: "contour", l: qsTr("Contour") }, { v: "paper", l: qsTr("Paper") }, { v: "daylight", l: qsTr("Daylight") },
+        { v: "ink", l: qsTr("Ink") }, { v: "spark", l: qsTr("Spark") }, { v: "image", l: qsTr("Image") }, { v: "none", l: qsTr("None") },
+    ].filter((c) => c.v !== "image" || hasPicture)
+    property string menuShape: (menuPane && menuPane.data && menuPane.data.shape) || ""
+    property var shapeChoices: [
+        { v: "", p: "", l: qsTr("Default") }, { v: "square", p: "square", l: qsTr("Square") },
+        { v: "squircle 22", p: "squircle 9", l: qsTr("Squircle") }, { v: "cut 18", p: "cut 7", l: qsTr("Cut") },
+        { v: "scoop 18", p: "scoop 7", l: qsTr("Scoop") }, { v: "cut 28, round 6, cut 28, round 6", p: "cut 10, round 3, cut 10, round 3", l: qsTr("Notch") },
+        { v: "round 4, cut 24, round 4, cut 24", p: "round 3, cut 10, round 3, cut 10", l: qsTr("Bevel") },
+        { v: "scoop 14, round 14, scoop 14, round 14", p: "scoop 7, round 7, scoop 7, round 7", l: qsTr("Ticket") },
+    ]
+    property var debugChoices: [{ v: "mode", l: qsTr("Dev tools") }, { v: "fps", l: qsTr("FPS") }]
+    function debugOn(v) { return v === "mode" ? debug.enabled : !!debug.options[v]; }
+    function debugFlip(v) { if (v === "mode") debug.toggle(); else debug.option(v, !debug.options[v] || null); }
+    Process { id: files; command: ctxMenu.open ? "clay-files" : "" }
+    property string menuMedia: (menuPane && menuPane.data && menuPane.data.bg === "media" && menuPane.data.media) || ""
+    function menuOwn(k) { const v = menuPane && menuPane.data ? menuPane.data[k] : undefined; return typeof v === "number" ? v : null; }
+    property bool lookAll: false
+    property var lookKeys: ({ dim: "clay-pane-dim", blur: "clay-pane-blur" })
+    Process { id: rxConf; command: ctxMenu.open ? "rexui-rex" : "" }
+    function lookNow(k) {
+        if (!lookAll) return menuOwn(k);
+        const v = parseFloat(conf.values[lookKeys[k]]);
+        return isNaN(v) ? null : v;
+    }
+    function lookPut(k, v) {
+        if (lookAll) rxConf.send({ conf: { [lookKeys[k]]: v === null ? null : String(v) } });
+        else rex.paneData(menuBlock, k, v);
+    }
+    function lookSet(k, v) { lookSent = ({}); lookPut(k, v); }
+    property var lookBuiltin: ({ dim: 0.7, blur: 0 })
+    property var lookSent: ({})
+    property bool lookOpen: ctxMenu.open
+    onLookOpenChanged: lookSent = ({})
+    onLookAllChanged: lookSent = ({})
+    onMenuBlockChanged: lookSent = ({})
+    function lookEff(k) {
+        const own = lookAll ? null : menuOwn(k);
+        if (own !== null) return own;
+        const v = parseFloat(conf.values[lookKeys[k]]);
+        return isNaN(v) ? lookBuiltin[k] : v;
+    }
+    function lookDrag(k, raw) {
+        const v = k === "dim" ? Math.round(raw * 100) / 100 : Math.round(raw);
+        if (v === lookSent[k] || (lookSent[k] === undefined && v === lookEff(k))) return;
+        lookSent = Object.assign({}, lookSent, { [k]: v });
+        lookPut(k, v);
+    }
+    function lookShow(k) { const v = lookEff(k); return k === "dim" ? Math.round(v * 100) + "%" : Math.round(v) + " pt"; }
+    function lookLabel(c) { return c.v !== null ? c.l : lookAll ? qsTr("Reset") : qsTr("Default"); }
+    property var dimChoices: [
+        { v: null, l: qsTr("Default") }, { v: 0.2, l: "20%" }, { v: 0.4, l: "40%" },
+        { v: 0.6, l: "60%" }, { v: 0.75, l: "75%" }, { v: 0.9, l: "90%" },
+    ]
+    property var blurChoices: [
+        { v: null, l: qsTr("Default") }, { v: 0, l: qsTr("Off") }, { v: 4, l: "4" },
+        { v: 8, l: "8" }, { v: 16, l: "16" }, { v: 32, l: "32" },
+    ]
+    function chooseMedia(m) {
+        rex.paneData(menuBlock, "media", m.path);
+        rex.paneData(menuBlock, "mediaKind", m.kind);
+        rex.paneData(menuBlock, "bg", "media");
+    }
+    function runItem(id) {
+        if (id === "ask") {
+            win.open = true;
+            if (!context.hasSelection) return;
+            rex.terminal("copy");
+            mode = "inline";
+            asked += 1;
+            liveQ = qsTr("Explain this:"); live = "";
+            claude.send({ inline: { id: asked, text: qsTr("Explain this:"), clipboard: true } });
+        } else if (id === "copy" || id === "paste") rex.terminal(id);
+        else rex.run(id);
+    }
+    function glyphs(k) {
+        if (!k) return "";
+        const names = { space: "Space", enter: "↩", return: "↩", tab: "⇥", escape: "⎋", backspace: "⌫", left: "←", right: "→", up: "↑", down: "↓" };
+        const parts = String(k).toLowerCase().split("+"), key = parts.pop();
+        let s = "";
+        if (parts.includes("ctrl")) s += "⌃";
+        if (parts.includes("alt")) s += "⌥";
+        if (parts.includes("shift")) s += "⇧";
+        if (parts.includes("cmd")) s += "⌘";
+        return s + (names[key] || key.toUpperCase());
+    }
+    function fresh() { claude.send({ reset: true }); talk = []; live = ""; liveQ = ""; error = ""; }
+    function resetsAt(l) {
+        if (!l || !l.resets) return qsTr("reset");
+        const d = new Date(l.resets * 1000), now = new Date();
+        const day = d.toDateString() === now.toDateString() ? "" : d.toLocaleDateString(i18n.locale, { weekday: "short" }) + " ";
+        return qsTr("resets %1", day + hhmm(d));
+    }
+
+    Stack {
+        grow: 1
+
+        Drawer {
+            id: ctxMenu
+            placement: "pointer"; command: ["context.menu"]
+            color: surface; rounding: 12; animation: 180
+            Column {
+                width: 248; padding: 6; spacing: 1
+                Grid {
+                    columns: 1; spacing: 1
+                    model: menuItems
+                    delegate: Stack {
+                        Column { visible: !!modelData.separator; verticalPadding: 4; Rectangle { height: 1; color: hairline } }
+                        Stack {
+                            visible: !modelData.separator
+                            Rectangle {
+                                radius: 7; horizontalPadding: 10; verticalPadding: 6
+                                color: itemButton.hovered && modelData.enabled ? containerHigh : "transparent"; colorAnimation: 90
+                                Row {
+                                    spacing: 9
+                                    Stack {
+                                        width: 14; height: 14
+                                        Shader { visible: !!modelData.spark; source: "shaders/spark.metal"; colors: [clay]; params: [12, 0, 1, 1]; running: false }
+                                        Icon { visible: !modelData.spark && !!modelData.icon; name: modelData.icon || "circle"; font.size: 11; color: modelData.enabled ? inkDim : outline }
+                                    }
+                                    Text {
+                                        text: modelData.title; font.size: 13; color: modelData.enabled ? ink : outline
+                                        font.family: modelData.spark ? "serif" : ""
+                                    }
+                                    Item { grow: 1 }
+                                    Text { visible: !!modelData.key; text: glyphs(modelData.key); font.size: 11; font.letterSpacing: 0.6; color: outline }
+                                }
+                            }
+                            Button {
+                                id: itemButton
+                                stateLayer: false; enabled: !modelData.separator && !!modelData.enabled
+                                onClicked: { ctxMenu.open = false; runItem(modelData.id); }
+                            }
+                        }
+                    }
+                }
+                Column { visible: !!menuBlock; verticalPadding: 4; Rectangle { height: 1; color: hairline } }
+                Column {
+                    visible: !!menuBlock; horizontalPadding: 10; spacing: 6; verticalPadding: 4
+                    Text { text: caps(qsTr("Background")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline }
+                    Grid {
+                        columns: 4; spacing: 4
+                        model: bgChoices
+                        delegate: Stack {
+                            Rectangle {
+                                height: 24; radius: 6; halign: "center"; valign: "center"
+                                color: menuBg === modelData.v ? clay : bgButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                border.width: menuBg === modelData.v ? 0 : 1; border.color: hairline
+                                Text { text: modelData.l; font.size: 11; color: menuBg === modelData.v ? onPrimary : ink }
+                            }
+                            Button { id: bgButton; stateLayer: false; onClicked: rex.paneData(menuBlock, "bg", modelData.v) }
+                        }
+                    }
+                    Text { text: caps(qsTr("Shape")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline }
+                    Grid {
+                        columns: 4; spacing: 4
+                        model: shapeChoices
+                        delegate: Stack {
+                            Rectangle {
+                                height: 24; radius: 6; shape: modelData.p; halign: "center"; valign: "center"
+                                color: menuShape === modelData.v ? clay : shapeButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                border.width: menuShape === modelData.v ? 0 : 1; border.color: shapeButton.hovered ? outline : hairline
+                                Text { text: modelData.l; font.size: 11; color: menuShape === modelData.v ? onPrimary : ink }
+                            }
+                            Button { id: shapeButton; stateLayer: false; onClicked: rex.paneData(menuBlock, "shape", modelData.v || null) }
+                        }
+                    }
+                    Text { text: caps(qsTr("Debug")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline }
+                    Grid {
+                        columns: 4; spacing: 4
+                        model: debugChoices
+                        delegate: Stack {
+                            Rectangle {
+                                height: 24; radius: 6; halign: "center"; valign: "center"
+                                color: debugOn(modelData.v) ? clay : debugButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                border.width: debugOn(modelData.v) ? 0 : 1; border.color: hairline
+                                Text { text: modelData.l; font.size: 11; color: debugOn(modelData.v) ? onPrimary : ink }
+                            }
+                            Button { id: debugButton; stateLayer: false; onClicked: debugFlip(modelData.v) }
+                        }
+                    }
+                    Text {
+                        visible: (files.state.media || []).length > 0
+                        text: caps(qsTr("Media")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline
+                    }
+                    Grid {
+                        visible: (files.state.media || []).length > 0
+                        columns: 4; spacing: 4
+                        model: (files.state.media || []).slice(0, 12)
+                        delegate: Stack {
+                            height: 38
+                            Rectangle {
+                                radius: 6; color: container
+                                border.width: menuMedia === modelData.path ? 2 : 1
+                                border.color: menuMedia === modelData.path ? clay : mediaButton.hovered ? outline : hairline; colorAnimation: 140
+                                Image { visible: modelData.kind === "image"; source: modelData.kind === "image" ? modelData.path : ""; fit: "cover"; radius: 5 }
+                                Stack {
+                                    visible: modelData.kind === "video"; halign: "center"; valign: "center"
+                                    Icon { name: "film"; font.size: 13; color: inkDim }
+                                }
+                            }
+                            Button { id: mediaButton; stateLayer: false; onClicked: chooseMedia(modelData) }
+                        }
+                    }
+                    Row {
+                        spacing: 4; valign: "center"
+                        Text { text: caps(qsTr("Dim")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline }
+                        Item { grow: 1 }
+                        Grid {
+                            columns: 2; spacing: 4
+                            model: [{ v: false, l: qsTr("This pane") }, { v: true, l: qsTr("All panes") }]
+                            delegate: Stack {
+                                Rectangle {
+                                    horizontalPadding: 7; height: 18; radius: 9; valign: "center"
+                                    color: lookAll === modelData.v ? clay : scopeButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                    border.width: lookAll === modelData.v ? 0 : 1; border.color: hairline
+                                    Text { text: modelData.l; font.size: 10; color: lookAll === modelData.v ? onPrimary : inkDim }
+                                }
+                                Button { id: scopeButton; stateLayer: false; onClicked: lookAll = modelData.v }
+                            }
+                        }
+                    }
+                    Grid {
+                        columns: 3; spacing: 4
+                        model: dimChoices
+                        delegate: Stack {
+                            property bool on: lookNow("dim") === modelData.v
+                            Rectangle {
+                                height: 24; radius: 6; halign: "center"; valign: "center"
+                                color: on ? clay : dimButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                border.width: on ? 0 : 1; border.color: dimButton.hovered ? outline : hairline
+                                Text { text: lookLabel(modelData); font.size: 10.5; color: on ? onPrimary : ink }
+                            }
+                            Button { id: dimButton; stateLayer: false; onClicked: lookSet("dim", modelData.v) }
+                        }
+                    }
+                    Row {
+                        spacing: 8; valign: "center"
+                        Slider { grow: 1; from: 0; to: 1; color: clay; trackColor: hairline; value: lookEff("dim"); onMoved: lookDrag("dim", value); onReleased: lookDrag("dim", value) }
+                        Text { width: 38; align: "right"; text: lookShow("dim"); font.size: 11; font.tabular: true; color: inkDim }
+                    }
+                    Text { text: caps(qsTr("Blur")); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.3; color: outline }
+                    Grid {
+                        columns: 3; spacing: 4
+                        model: blurChoices
+                        delegate: Stack {
+                            property bool on: lookNow("blur") === modelData.v
+                            Rectangle {
+                                height: 24; radius: 6; halign: "center"; valign: "center"
+                                color: on ? clay : blurButton.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                border.width: on ? 0 : 1; border.color: blurButton.hovered ? outline : hairline
+                                Text { text: lookLabel(modelData); font.size: 10.5; color: on ? onPrimary : ink }
+                            }
+                            Button { id: blurButton; stateLayer: false; onClicked: lookSet("blur", modelData.v) }
+                        }
+                    }
+                    Row {
+                        spacing: 8; valign: "center"
+                        Slider { grow: 1; from: 0; to: 64; color: clay; trackColor: hairline; value: lookEff("blur"); onMoved: lookDrag("blur", value); onReleased: lookDrag("blur", value) }
+                        Text { width: 38; align: "right"; text: lookShow("blur"); font.size: 11; font.tabular: true; color: inkDim }
+                    }
+                }
+            }
+        }
+
+        Drawer {
+            id: win
+            lazy: true
+            placement: "center"; width: 680; height: 600
+            key: "cmd+shift+k"; keyTitle: qsTr("Ask Claude")
+            color: surface; rounding: 24; animation: 380
+            onOpenChanged: if (open) field.forceActiveFocus()
+
+            Stack {
+                grow: 1
+                Shader {
+                    source: "shaders/contour.metal"; running: motion; fps: 24
+                    colors: [light ? "#22141413" : "#1efaf9f5", clay]
+                    params: [16, 260, 0.010, 0.7, 0.9]
+                }
+                Shader { source: "shaders/paper.metal"; running: false; colors: ["#00000000", glow]; params: [0, 0.5, 0.35, 0] }
+
+                Column {
+                    padding: 26; spacing: 14
+
+                    Row {
+                        spacing: 12
+                        Stack { width: 30; height: 30; Shader { source: "shaders/spark.metal"; colors: [clay, kraft]; params: [12, thinking ? 1 : 0, 1.3, 1]; running: motion; fps: 30 } }
+                        Text { text: qsTr("Claude"); font.family: "serif"; font.size: 26; color: ink }
+                        Item { grow: 1 }
+                        Grid {
+                            columns: 3; spacing: 4; width: 312
+                            model: [{ k: "inline", label: qsTr("Inline") }, { k: "tab", label: qsTr("New tab") }, { k: "session", label: qsTr("New session") }]
+                            delegate: Stack {
+                                Rectangle {
+                                    height: 26; radius: 13; halign: "center"; valign: "center"
+                                    color: mode === modelData.k ? clay : "transparent"; colorAnimation: 160
+                                    border.width: 1; border.color: mode === modelData.k ? "transparent" : hairline
+                                    Text { text: modelData.label; font.size: 12; color: mode === modelData.k ? onPrimary : inkDim; colorAnimation: 160 }
+                                }
+                                Button { stateRadius: 13; onClicked: mode = modelData.k }
+                            }
+                        }
+                        Stack {
+                            width: 26; height: 26
+                            Rectangle { radius: 13; color: closeWin.hovered ? containerHigh : "transparent"; colorAnimation: 120; halign: "center"; valign: "center"
+                                Icon { name: "xmark"; font.size: 10; font.bold: true; color: closeWin.hovered ? ink : outline; colorAnimation: 120 } }
+                            Button { id: closeWin; stateLayer: false; onClicked: win.open = false }
+                        }
+                    }
+
+                    Rectangle {
+                        grow: 1; radius: 16; color: light ? "#b3f0eee6" : "#a6262624"; border.width: 1; border.color: hairline
+                        padding: 18
+                        Stack {
+                            Column {
+                                visible: mode !== "inline" || (!talk.length && !liveQ)
+                                halign: "center"; valign: "center"; spacing: 8
+                                Text {
+                                    text: mode === "inline" ? qsTr("Ask anything.") : mode === "tab" ? qsTr("claude, in a new tab of this session.") : qsTr("claude, in a session of its own.")
+                                    font.family: "serif"; font.italic: true; font.size: 20; color: inkDim; align: "center"
+                                }
+                                Text {
+                                    text: mode === "inline" ? qsTr("Answered here, without tools; each question goes on from the last.") : qsTr("Return opens it; Rex goes there.")
+                                    font.size: 12; color: outline; align: "center"
+                                }
+                            }
+                            List {
+                                visible: mode === "inline" && (talk.length > 0 || !!liveQ)
+                                follow: true; spacing: 18; fade: 0.04
+                                model: talk.concat(liveQ ? [{ q: liveQ, a: live, error: "", live: true }] : [])
+                                delegate: Column {
+                                    spacing: 6
+                                    Text { text: modelData.q; wrap: true; font.family: "serif"; font.italic: true; font.size: 15; color: inkDim }
+                                    Text {
+                                        visible: !!modelData.a
+                                        text: modelData.a; wrap: true; font.size: 14; color: ink
+                                    }
+                                    Text { visible: !!modelData.live && !modelData.a; text: qsTr("Thinking…"); font.family: "serif"; font.italic: true; font.size: 13; color: outline }
+                                    Text { visible: !!modelData.error; text: modelData.error; wrap: true; font.size: 12; color: fig }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 22; color: container; border.width: 1; border.color: field.text ? clay : hairline; colorAnimation: 160
+                        horizontalPadding: 16; verticalPadding: 8
+                        Row {
+                            spacing: 10
+                            TextField {
+                                id: field
+                                grow: 1; autofocus: true; font.family: "serif"; font.size: 16; color: ink
+                                placeholder: mode === "inline" ? qsTr("Ask Claude…") : qsTr("Ask Claude in a new %1…", mode === "tab" ? qsTr("tab") : qsTr("session"))
+                                onAccepted: send()
+                                onCancelled: win.open = false
+                            }
+                            Stack {
+                                Rectangle { width: 30; height: 30; radius: 15; color: thinking ? containerHighest : clay; colorAnimation: 160; halign: "center"; valign: "center"
+                                    Icon { name: thinking ? "stop.fill" : "arrow.up"; font.size: 12; font.bold: true; color: thinking ? ink : onPrimary } }
+                                Button { stateRadius: 15; stateColor: onPrimary; onClicked: thinking ? claude.send({ stop: true }) : send() }
+                            }
+                        }
+                    }
+                    Text { visible: !!error; text: error; wrap: true; font.size: 11; color: fig }
+
+                    Row {
+                        spacing: 16; horizontalPadding: 4
+                        Grid {
+                            columns: 2; spacing: 16; width: 420
+                            model: [{ label: qsTr("5 hours"), l: usage.session }, { label: qsTr("Week"), l: usage.weekly }].filter((x) => !!x.l)
+                            delegate: Row {
+                                spacing: 6
+                                Text { text: caps(modelData.label); font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: outline }
+                                Text { text: Math.round(modelData.l.percent) + "%"; font.size: 12; font.tabular: true; color: modelData.l.severity === "critical" ? fig : modelData.l.severity === "warning" ? kraft : ink }
+                                Text { text: resetsAt(modelData.l); font.size: 11; color: outline }
+                            }
+                        }
+                        Item { grow: 1 }
+                        Stack {
+                            visible: mode === "inline" && talk.length > 0
+                            Row {
+                                spacing: 5; horizontalPadding: 6; verticalPadding: 3
+                                Icon { name: "square.and.pencil"; font.size: 11; color: clay }
+                                Text { text: qsTr("New conversation"); font.size: 12; color: inkDim }
+                            }
+                            Button { stateRadius: 8; onClicked: fresh() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

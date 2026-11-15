@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+set -euo pipefail
+self=$(readlink -f "${BASH_SOURCE[0]}")
+repo=$(cd "$(dirname "$self")/../.." && pwd)
+distros="$HOME/.config/rex/distros"
+default="$HOME/.config/rex/ui"
+version=1.0.1
+homepage=https://github.com/Akzestia/rexui
+vanilla="$repo/distros/vanilla"
+
+folder() {
+    case $1 in
+    "") echo "$default" ;;
+    default | vanilla) echo "$vanilla" ;;
+    */* | .*) (cd "$1" 2>/dev/null && pwd) || { echo "rexui: no folder $1" >&2; return 1; } ;;
+    *) [ -d "$distros/$1" ] && echo "$distros/$1" || { echo "rexui: no distro $1 (rexui list)" >&2; return 1; } ;;
+    esac
+}
+
+shown() {
+    local t d
+    t=$(defaults read rexui try 2>/dev/null || true)
+    if [ -n "$t" ] && [ -d "$t" ]; then echo "$t"; return; fi
+    d=$(defaults read rexui distro 2>/dev/null || true)
+    folder "$d" 2>/dev/null || echo "$default"
+}
+
+loaded() { find "$1/" "$1/ui/" -maxdepth 1 -name '[[:lower:]]*.rui' 2>/dev/null | LC_ALL=C grep -E '/[a-z][^/]*\.rui$' | sed 's|//|/|' | sort; }
+
+bindir() { local p; p=$(cd "$1" && pwd -P); p=${p#/}; echo "$HOME/Library/Caches/rexui/distros/${p//\//%}/bin"; }
+
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+bazel=(bazel --max_idle_secs=300)
+opts=(--symlink_prefix=/ -c opt --disk_cache="$HOME/Library/Caches/rexui/bazel"
+    --experimental_disk_cache_gc_max_size=2G --experimental_disk_cache_gc_max_age=30d --experimental_disk_cache_gc_idle_delay=1m)
+
+build() {
+    local dir=$1 stale=${2:-} bin stamp root f name parts=() pats=() d
+    for d in backends panes; do
+        [ -n "$(find "$dir/$d" -name BUILD.bazel -print -quit 2>/dev/null)" ] && parts+=("$dir/$d") && pats+=("//$d/...")
+    done
+    [ -f "$dir/MODULE.bazel" ] && [ ${#parts[@]} -gt 0 ] || return 0
+    bin=$(bindir "$dir")
+    stamp="$bin/.built"
+    if [ -n "$stale" ] && [ -f "$stamp" ] &&
+        [ -z "$(find "$dir/MODULE.bazel" "${parts[@]}" \( -name target -o -name node_modules \) -prune -o ! -name '*.rui' -newer "$stamp" -print | head -1)" ]; then
+        return 0
+    fi
+    command -v bazel >/dev/null || { echo "rexui: $dir's backends build with Bazel: brew install bazelisk" >&2; return 1; }
+    echo "building ${parts[*]}"
+    (cd "$dir" && "${bazel[@]}" build "${opts[@]}" "${pats[@]}") || return 1
+    root=$(cd "$dir" && "${bazel[@]}" info "${opts[@]}" execution_root 2>/dev/null)
+    mkdir -p "$bin"
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        name=$(basename "$f")
+        if ! cmp -s "$root/$f" "$bin/$name"; then
+            cp -fL "$root/$f" "$bin/.$name.new" && chmod u+w "$bin/.$name.new" && mv -f "$bin/.$name.new" "$bin/$name"
+            echo "  $name"
+        fi
+        if [ -d "$root/$f.runfiles" ] && ! file -b "$root/$f" | grep -q Mach-O; then
+            rm -rf "$bin/$name.runfiles" && cp -RL "$root/$f.runfiles" "$bin/$name.runfiles"
+        fi
+    done < <(cd "$dir" && "${bazel[@]}" cquery "${opts[@]}" "kind(\".*_binary\", $(IFS=+; echo "${pats[*]}" | sed 's/+/ + /g'))" --output=files 2>/dev/null | grep '^bazel-out/')
+    touch "$stamp"
+}
+
+usage() {
+    local R=$'\e[0m' P=$'\e[38;2;255;160;202m' W=$'\e[38;2;255;245;246m' G=$'\e[38;2;150;150;150m'
+    local C=$'\e[38;2;146;228;250m' M=$'\e[35m' Y=$'\e[33m' K=$'\e[38;2;255;182;202m'
+    local showing
+    showing=$(shown | sed "s|^$HOME|~|")
+    echo "$R"
+    echo "    ${P}⣇⣿⠘⣿⣿⣿⡿⡿⣟⣟⢟⢟⢝⠵⡝⣿⡿⢂${R}${W}⣼⣷⣌${R}${P}⠩⡫⡻⣝⠹⢿⣿⣷${R}"
+    echo "    ${P}⡆⣿⣆⠱⣝⡵⣝⢅⠙⣿⢕⢕⢕⢕⢝⣥⢒⠅${R}${W}⣿⣿⣿⡿⣳⣌${R}${P}⠪⡪⣡⢑⢝⣇${R}"
+    echo "    ${P}⡆⣿⣿⣦⠹⣳⣳⣕⢅⠈⢗⢕⢕⢕⢕⢕⢈⢆${R}${W}⠟⠋⠉⠁⠉⠉⠁${R}${P}⠈⠼⢐⢕⢽${R}"
+    echo "    ${P}⡗${R}${W}⢰⣶⣶⣦${R}${P}⣝⢝⢕⢕⠅${R}${W}⡆${R}${P}⢕⢕⢕⢕${R}⢕⣴⠏⣠⡶⠛⡉⡉⡛⢶⣦⡀${P}⠐⣕⢕${R}        ${C}rexui${R} ${G}1nonly ui lib for Rex${R} ${C}^_^${R}"
+    echo "    ${P}⡝⡄${R}${W}⢻⢟⣿⣿⣷${R}${P}⣕⣕⣅${R}${W}⣿⣔${R}${P}⣕${R}⣵${W}⣵⣿⣿${R}⢠⣿${C}⢠⣮⡈${R}${Y}⣌${R}⠨⠅⠹⣷⡀${P}⢱⢕${R}"
+    echo "    ${P}⡝⡵${R}⠟⠈⢀⣀⣀⡀⠉${W}⢿⣿⣿⣿⣿⣿⣿⣿${R}⣼⣿⢈⡋${Y}⠴⢿⡟${R}${C}⣡⡇${R}⣿⡇⡀${P}⢕${R}        ${G}Version${R} ${C}  >${R} ${M}${version}${R}"
+    echo "    ${P}⡝${R}⠁⣠⣾⠟⡉⡉⡉⠻⣦${W}⣻⣿⣿⣿⣿⣿⣿⣿${R}⣿⣧${C}⠸⣿⣦⣥⣿⡇${R}⡿⣰⢗⢄"
+    echo "    ${P}⠁${R}⢰⣿⡏${C}⣴⣌${R}⠈${Y}⣌${R}⠡⠈⢻⣿${W}⣿⣿⣿⣿⣿⣿⣿⣿⣿⣬${R}${C}⣉⣉⣁${R}⣄⢖⢕⢕⢕        ${G}Copyright${R} ${C}>${R} ${M}アクゼスティア${R}"
+    echo "    ${P}⡀${R}⢻⣿⡇${C}⢙⠁${R}${Y}⠴⢿⡟${R}${C}⣡⡆${R}${W}⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣵⣵⣿${R}"
+    echo "    ${P}⡻⣄${R}⣻⣿⣌${C}⠘⢿⣷⣥⣿⠇${R}${W}⣿⣿⣿⣿⣿⣿⠛⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿${R}        ${G}Showing${R} ${C}  >${R} ${Y}${showing}${R}"
+    echo "    ${P}⣷⢄${R}${W}⠻⣿${R}⣟⠿⠦${C}⠍⠉${R}${W}⣡⣾⣿⣿⣿⣿⣿⣿${R}${K}⢸⣿⣦${R}${W}⠙⣿⣿⣿⣿⣿⣿⣿⣿⠟${R}"
+    echo "    ${P}⡕⡑⣑${R}${W}⣈⣻⢗⢟⢞⢝⣻⣿⣿⣿⣿⣿⣿⣿${R}${K}⠸⣿⠿⠃${R}${W}⣿⣿⣿⣿⣿⣿⡿⠁${R}${P}⣠${R}        ${G}GitHub${R} ${C}   >${R} ${M}${homepage}${R}"
+    echo "    ${P}⡝⡵⡈${R}⢟⢕⢕⢕⢕${W}⣵⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣿⣿⣿⣿⣿⠿⠋${R}${P}⣀⣈⠙ ${R}"
+    echo "    ${P}⡝⡵⡕⡀${R}⠑${W}⠳⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛${R}${P}⢉⡠⡲⡫⡪⡪⡣${R}"
+
+    echo
+    echo "${M}Commands:${R}"
+    row() { printf "    ${C}%-12s${R}%-19s| ${G}%s${R}\n" "$1" "$2" "$3"; }
+    row load "<distro|folder>" "Shows a distro: ~/.config/rex/distros/<name>, a folder, or default (vanilla)"
+    row default "" "Vanilla Rex: no docks, rexui's options as Rex has them (load to go back)"
+    row list "" "Lists the distros, the one shown marked"
+    row current "" "Prints the folder shown"
+    row build "[distro|folder]" "Builds its backends with Bazel (what's shown, without one)"
+    row try "<file|folder|stop>" "Shows a folder instead of the distro, or a file beside it, till try stop"
+    row check "[--perf] [path]" "Loads as rexui would (what's shown, without one) and prints the errors; --perf: and what each costs that it needn't"
+    row new "<name>" "Makes a distro to start from in ~/.config/rex/distros ^_^"
+    row loading "[file|stop]" "Plays the loading screen now, no relaunch (--hold: till loading stop)"
+    row embed "<app> [args]" "Shows an app's window in this pane (--relative: games; --crossover: Windows)"
+    row pane "<widget|file|url>" "Shows a .rui widget (the distro's panes/) or a web page in this pane"
+    row launch "[name]" "Shows one of the launcher's apps or widgets by its name (none: the list)"
+    row "" "" "  (--split <right|left|above|below>, --tab: in a new pane; --block <id>: in that one)"
+    row completions "<zsh|bash>" "Prints the shell completion (just cli::install installs zsh's)"
+    row help "" "Prints this message ^_^"
+
+    echo
+}
+
+apps="$repo/build/apps"
+rex_cli="/Applications/Rex Beta.app/Contents/Helpers/Rex Server.rex/Contents/MacOS/rex"
+die() { echo "rexui: $*" >&2; exit 2; }
+
+placement() {
+    local allowed=" $1 "; shift
+    split= tab= block= own=() rest=()
+    while [ $# -gt 0 ]; do
+        case $1 in
+        --split) [ $# -ge 2 ] || die "--split takes right, left, above or below"; split=$2; shift 2 ;;
+        --split=*) split=${1#--split=}; shift ;;
+        --tab) tab=1; shift ;;
+        --block) [ $# -ge 2 ] || die "--block takes a block's id"; block=$2; shift 2 ;;
+        --*) [[ $allowed == *" $1 "* ]] || die "no option $1"; own+=("$1"); shift ;;
+        *) break ;;
+        esac
+    done
+    case $split in "" | right | left | above | below) ;; *) die "--split takes right, left, above or below, not $split" ;; esac
+    rest=("$@")
+}
+
+show() {
+    local label=$1; shift
+    if [ -n "$split" ] || [ -n "$tab" ]; then
+        [ -x "$rex_cli" ] || die "no Rex CLI at $rex_cli"
+        local how=(split --split="${split:-right}")
+        [ -n "$tab" ] && how=(run)
+        [ -n "${REX_SESSION:-}" ] && how+=(-s "$REX_SESSION")
+        [ -n "$block" ] && how+=(-b "$block")
+        local env=(PATH="$PATH")
+        local v; for v in REXUI_DISTRO REXUI_PANE_KEYS REXUI_EMBED_EXE REXUI_CROSSOVER; do [ -n "${!v:-}" ] && env+=("$v=${!v}"); done
+        exec "$rex_cli" "${how[@]}" --shell=none --label "$label" -- /usr/bin/env -u DYLD_INSERT_LIBRARIES "${env[@]}" "$@"
+    fi
+    if [ -n "$block" ]; then
+        [[ $block == block:* ]] || block="block:$block"
+        local log="$HOME/Library/Logs/rexui-launch.log"
+        REX_BLOCK=$block nohup /usr/bin/env -u DYLD_INSERT_LIBRARIES "$@" </dev/null >>"$log" 2>&1 &
+        echo "$label in $block (pid $!; its output: ${log/#$HOME/~})"
+        exit 0
+    fi
+    [ -n "${REX_BLOCK:-}" ] || die "not in a Rex pane (\$REX_BLOCK unset): --split, --tab or --block <id> to say where"
+    exec /usr/bin/env -u DYLD_INSERT_LIBRARIES "$@"
+}
+
+tool() { [ -x "$apps/$1" ] || die "no build/apps/$1 (just apps::core)"; echo "$apps/$1"; }
+
+json_at() { plutil -extract "$2" raw -o - "$1" 2>/dev/null || true; }
+catalogue() {
+    local dir f n i
+    dir=$(shown)
+    f="$dir/launcher.json"
+    if [ -f "$f" ]; then
+        n=$(json_at "$f" apps); for ((i = 0; i < ${n:-0}; i++)); do printf 'app\t%s\t%s\n' "$(json_at "$f" "apps.$i.name")" "$i"; done
+        n=$(json_at "$f" widgets); for ((i = 0; i < ${n:-0}; i++)); do printf 'widget\t%s\t%s\n' "$(json_at "$f" "widgets.$i.name")" "w$i"; done
+    fi
+    for n in "$dir"/panes/*.rui; do [ -f "$n" ] && printf 'widget\t%s\t%s\n' "$(basename "$n" .rui)" "$n"; done
+    true
+}
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+tilde() { case $1 in "~/"*) echo "$HOME/${1#\~/}" ;; *) echo "$1" ;; esac; }
+
+case ${1:-} in
+embed)
+    shift
+    placement "--relative --crossover --library" "$@"
+    t=$(tool rexui-embed)
+    for o in ${own[@]+"${own[@]}"}; do [ "$o" = --library ] && { echo "$apps/librexui-embed.dylib"; exit 0; }; done
+    [ ${#rest[@]} -ge 1 ] || die "usage: rexui embed [--split <dir> | --tab | --block <id>] [--relative] [--crossover] <app | program | bottle [program]> [args...]"
+    show "$(basename "${rest[0]}" .app)" "$t" ${own[@]+"${own[@]}"} "${rest[@]}" ;;
+pane)
+    shift
+    placement "" "$@"
+    t=$(tool rexui-pane)
+    [ ${#rest[@]} -ge 1 ] || die "usage: rexui pane [--split <dir> | --tab | --block <id>] <file.rui | widget | url> [args...]"
+    [ -n "${REXUI_DISTRO:-}" ] || export REXUI_DISTRO="$(shown)"
+    show "$(basename "${rest[0]}" .rui)" "$t" "${rest[@]}" ;;
+launch)
+    shift
+    placement "" "$@"
+    if [ ${#rest[@]} -eq 0 ]; then catalogue | cut -f1,2 | column -t -s $'\t'; exit 0; fi
+    want=$(lower "${rest[0]}")
+    hit=
+    while IFS=$'\t' read -r kind name at; do
+        [ "$(lower "$name")" = "$want" ] && { hit=$(printf '%s\t%s\t%s' "$kind" "$name" "$at"); break; }
+    done < <(catalogue)
+    [ -n "$hit" ] || die "nothing named ${rest[0]} to launch (rexui launch: the list)"
+    IFS=$'\t' read -r kind name at <<<"$hit"
+    f="$(shown)/launcher.json"
+    export REXUI_DISTRO="$(shown)"
+    if [ "$kind" = widget ]; then
+        file=$at
+        [[ $at == w* ]] && file=$(tilde "$(json_at "$f" "widgets.${at#w}.path")")
+        show "$name" "$(tool rexui-pane)" "$file" "${rest[@]:1}"
+    fi
+    keys=()
+    n=$(json_at "$f" keys); for ((i = 0; i < ${n:-0}; i++)); do keys+=("$(json_at "$f" "keys.$i")"); done
+    n=$(json_at "$f" "apps.$at.keys"); for ((i = 0; i < ${n:-0}; i++)); do keys+=("$(json_at "$f" "apps.$at.keys.$i")"); done
+    [ ${#keys[@]} -gt 0 ] && export REXUI_PANE_KEYS="$(IFS=,; echo "${keys[*]}")"
+    cmd=()
+    [ "$(json_at "$f" "apps.$at.relative")" = true ] && cmd+=(--relative)
+    p=$(json_at "$f" "apps.$at.path")
+    if [ -n "$p" ]; then cmd+=("$(tilde "$p")")
+    else n=$(json_at "$f" "apps.$at.command"); for ((i = 0; i < ${n:-0}; i++)); do cmd+=("$(tilde "$(json_at "$f" "apps.$at.command.$i")")"); done; fi
+    [ ${#cmd[@]} -gt 0 ] || die "$name in $f has neither a path nor a command"
+    show "$name" "$(tool rexui-embed)" "${cmd[@]}" "${rest[@]:1}" ;;
+load)
+    [ $# -eq 2 ] || { echo "usage: rexui load <distro|folder|default>" >&2; exit 2; }
+    dir=$(folder "$2")
+    [ "$dir" = "$vanilla" ] || [ -n "$(loaded "$dir")" ] || echo "rexui: $dir has no .rui file to load (a name starting with a small letter)" >&2
+    [ -t 1 ] && { build "$dir" stale || echo "rexui: its backends didn't build; showing it anyway" >&2; }
+    if [ "$dir" = "$default" ]; then defaults delete rexui distro 2>/dev/null || true
+    elif [ "$(dirname "$dir")" = "$distros" ]; then defaults write rexui distro "$(basename "$dir")"
+    else defaults write rexui distro "$dir"; fi
+    notifyutil -p com.rexui.scan 2>/dev/null || true
+    echo "showing $dir" ;;
+default)
+    [ $# -eq 1 ] || { echo "usage: rexui default (then rexui load <distro> to go back)" >&2; exit 2; }
+    [ -f "$vanilla/rui-config.lua" ] || { echo "rexui: no $vanilla/rui-config.lua" >&2; exit 1; }
+    defaults delete rexui try 2>/dev/null || true
+    defaults write rexui distro "$vanilla"
+    notifyutil -p com.rexui.scan 2>/dev/null || true
+    echo "showing vanilla Rex: no docks, rexui's options as Rex has them (rexui load <distro> to go back)" ;;
+list)
+    now=$(shown)
+    mark() { [ "$1" = "$now" ] && echo "* $2" || echo "  $2"; }
+    mark "$vanilla" "default (vanilla: Rex as it is)"
+    for d in "$distros"/*/; do [ -d "$d" ] && mark "${d%/}" "$(basename "$d")"; done
+    [ -d "$default" ] && mark "$default" "$default (no distro chosen)"
+    t=$(defaults read rexui try 2>/dev/null || true)
+    [ -n "$t" ] && echo "  trying $t (rexui try stop)"
+    true ;;
+current) shown ;;
+build)
+    [ $# -le 3 ] || { echo "usage: rexui build [--stale] [distro|folder]" >&2; exit 2; }
+    stale=
+    [ "${2:-}" = --stale ] && { stale=1; shift; }
+    dir=$(folder "${2:-$(shown)}")
+    build "$dir" "$stale" ;;
+try)
+    [ $# -eq 2 ] || { echo "usage: rexui try <file.rui|folder|distro> | rexui try stop" >&2; exit 2; }
+    if [ "$2" = stop ]; then defaults delete rexui try 2>/dev/null || true; notifyutil -p com.rexui.scan 2>/dev/null || true; echo "showing $(shown)"; exit 0; fi
+    if [ -e "$2" ]; then
+        p=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
+        [ -d "$2" ] && p=$(cd "$2" && pwd)
+    else
+        p=$(folder "$2" 2>/dev/null) || { echo "rexui: no $2 (a file, a folder or a distro: rexui list)" >&2; exit 1; }
+        p=$(cd "$p" && pwd)
+    fi
+    "$0" check "$p" || echo "rexui: trying it anyway (its dock shows the error)" >&2
+    defaults write rexui try "$p"
+    notifyutil -p com.rexui.scan 2>/dev/null || true
+    echo "trying $p (rexui try stop)" ;;
+check)
+    perf=
+    [ "${2:-}" = --perf ] && { perf=--perf; shift; }
+    target=${2:-$(shown)}
+    [ -e "$target" ] || target=$(folder "$target")
+    files=()
+    if [ -d "$target" ]; then
+        while IFS= read -r f; do files+=("$f"); done < <(loaded "$target"; [ -d "$target/panes" ] && loaded "$target/panes")
+    else files=("$target"); fi
+    [ ${#files[@]} -gt 0 ] || { echo "rexui: nothing to check in $target" >&2; exit 1; }
+    [ -x "$repo/build/rexui-check" ] || { echo "rexui: no build/rexui-check (just b)" >&2; exit 1; }
+    static=0
+    "$repo/build/rexui-check" --warnings $perf "${files[@]}" | grep -v -e ': ok' -e '^failed ' || true
+    [ -z "$perf" ] || "$repo/build/rexui-check" --sidefx "${files[@]}" |
+        awk '/^== /{f=$2} /^  time: (its|a turn)/{sub(/^  time: /, ""); print f ": warning: " $0}'
+    "$repo/build/rexui-check" "${files[@]}" >/dev/null || static=1
+    out=$("$repo/build/rexui-check" --load "${files[@]}") || true
+    echo "$out" | grep -v '^failed '
+    [ "$(echo "$out" | tail -1)" = "failed 0" ] && [ $static = 0 ] ;;
+new)
+    [ $# -eq 2 ] && [[ $2 =~ ^[A-Za-z0-9._-]+$ ]] || { echo "usage: rexui new <name>" >&2; exit 2; }
+    dir="$distros/$2"
+    [ ! -e "$dir" ] || { echo "rexui: $dir is there already" >&2; exit 1; }
+    mkdir -p "$distros"
+    cp -R "$repo/src/cli/template" "$dir"
+    echo "made $dir: rexui load $2 shows it" ;;
+loading)
+    shift
+    hold= file=
+    for a in "$@"; do
+        case $a in
+        --hold) hold=hold ;;
+        stop) [ $# -eq 1 ] || { echo "usage: rexui loading stop" >&2; exit 2; }
+              defaults write rexui loading stop; notifyutil -p com.rexui.loading; echo "loading screen: its exit"; exit 0 ;;
+        -*) echo "usage: rexui loading [file.rui] [--hold] | rexui loading stop" >&2; exit 2 ;;
+        *) [ -f "$a" ] || { echo "rexui: no file $a" >&2; exit 1; }
+           file=$(cd "$(dirname "$a")" && pwd)/$(basename "$a") ;;
+        esac
+    done
+    [ -n "$file" ] && { "$0" check "$file" >/dev/null || echo "rexui: $file has errors (rexui check $a); playing it anyway" >&2; }
+    pgrep -qf "Rex UI.app/Contents/MacOS/" || { echo "rexui: Rex UI isn't running (a launch shows the loading screen anyway)" >&2; exit 1; }
+    defaults write rexui loading "$(printf 'play\t%s\t%s' "$file" "$hold")"
+    notifyutil -p com.rexui.loading
+    shown_file=${file:-"the distro's own"}; echo "loading screen: $shown_file${hold:+, held (rexui loading stop)}" ;;
+completions)
+    case ${2:-} in
+    zsh) cat "$repo/src/cli/completions/_rexui" ;;
+    bash) cat "$repo/src/cli/completions/rexui.bash" ;;
+    *) echo "usage: rexui completions <zsh|bash>" >&2; exit 2 ;;
+    esac ;;
+help | -h | --help) usage ;;
+*)
+    usage
+    [ $# -eq 0 ] || { echo "rexui: no command $1" >&2; exit 2; } ;;
+esac

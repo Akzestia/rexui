@@ -1,0 +1,734 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Column {
+    spacing: 0
+    color: bg
+    property bool framed: !debug.here.pane
+    radius: framed ? pr : 0
+    border.width: framed ? 1 : 0
+    border.color: line
+
+    property string me: "elements.rui"
+    property bool dragging: false
+    function devFile(name) { return (debug.here.path || "").replace(/[^/]+$/, name); }
+    function popOut() { debug.openFloating(devFile(me), [0.05, 0.08, 0.32, 0.82]); }
+    function toPane() { debug.openInPane(devFile(me), "horizontal", "before"); }
+    function openHere() { debug.openHere(devFile("Devtools.rui")); }
+    function backToDock() { debug.closePane(); }
+    property var sides: [{ s: "left", i: "sidebar.left" }, { s: "bottom", i: "rectangle.bottomthird.inset.filled" },
+                         { s: "right", i: "sidebar.right" }, { s: "top", i: "rectangle.topthird.inset.filled" }]
+    function sideOf(f) { return debug.options["dock " + f] || (f === "elements.rui" ? "left" : "bottom"); }
+    property string mySide: sideOf(me)
+    property bool sideMenu: false
+    function dockTo(s) {
+        sideMenu = false;
+        const other = me === "elements.rui" ? "console.rui" : "elements.rui", was = sideOf(me);
+        if (s === was) return;
+        if (sideOf(other) === s) debug.option("dock " + other, was);
+        debug.option("dock " + me, s);
+    }
+    property bool on: debug.enabled
+    onOnChanged: if (!on && debug.here.pane) debug.closePane()
+
+    property var T: debug.theme || ({})
+    property bool dark: T.dark !== undefined ? !!T.dark : theme.dark
+    property var bg: T.bg || (dark ? "#f0131418" : "#f4f6f6f8")
+    property var raised: T.raised || (dark ? "#1d1f24" : "#ffffff")
+    property var hover: T.hover || (dark ? "#24272d" : "#eceef1")
+    property var line: T.line || (dark ? "#2a2d34" : "#dcdee2")
+    property var field: T.field || (dark ? "#15171b" : "#f0f1f3")
+    property var ink: T.ink || (dark ? "#e3e5e8" : "#1d1f23")
+    property var dim: T.dim || (dark ? "#8b9099" : "#6b7079")
+    property var faint: T.faint || (dark ? "#5c616b" : "#a3a7ae")
+    property var blue: T.accent || "#4f8cff"
+    property var onBlue: T.onAccent || "#ffffff"
+    property var selColor: T.selected || (dark ? "#1f3a66" : "#dbe7ff")
+    property var tagColor: T.tag || (dark ? "#c792ea" : "#8b3fc6")
+    property var idColor: T.id || (dark ? "#82aaff" : "#2f5fd0")
+    property var compColor: T.comp || (dark ? "#ffcb6b" : "#a86b00")
+    property var strColor: T.string || (dark ? "#c3e88d" : "#3c7a1d")
+    property var numColor: T.number || (dark ? "#f78c6c" : "#b4501e")
+    property var warnColor: T.warn || (dark ? "#ffcb6b" : "#a86b00")
+    property var errColor: T.error || "#ff5f56"
+    property var okColor: T.ok || (dark ? "#c3e88d" : "#3c7a1d")
+    property string uiFont: T.font || ""
+    property string monoFont: T.mono || ""
+    property real r: T.radius !== undefined ? Number(T.radius) : 6
+    property real pr: T.panelRadius !== undefined ? Number(T.panelRadius) : 12
+    property real ar: Math.min(r, 3)
+    property int fade: 120
+
+    property string chosen: ""
+    property bool showOwn: false
+    property bool fileMenu: false
+    property var files: debug.docs.filter((d) => showOwn || !d.devtools)
+    property string file: chosen || (debug.selected && debug.selected.file) || ((files[0] || {}).path || "")
+    property var fileInfo: debug.docs.find((d) => d.path === file) || null
+    property var rows: []
+    property string rowsKey: ""
+    property int fileRevision: debug.revisions[file] || 0
+    property string treeFor: (debug.enabled ? "on" : "off") + "|" + file + "|" + fileRevision
+    onTreeForChanged: readTree()
+    function readTree() {
+        if (!debug.enabled) return;
+        const t = file ? debug.tree(file) : [];
+        const k = JSON.stringify(t);
+        if (k !== rowsKey) {
+            rowsKey = k; rows = t;
+            if (selUid) openAround(selUid);
+        }
+    }
+    property var opened: ({})
+    property string filter: ""
+    property var allRows: visibleRows(rows, opened, filter)
+    property int selUid: debug.selected && debug.selected.file === file ? debug.selected.uid : 0
+    property string selFile: debug.selected ? debug.selected.file : ""
+    onSelFileChanged: if (selFile && chosen && chosen !== selFile) chosen = ""
+    onSelUidChanged: if (selUid) openAround(selUid)
+    property int tick: 0
+    Timer { interval: 3000; running: debug.enabled && selUid > 0; onTriggered: tick += 1 }
+    property var info: (fileRevision, tick, debug.selectedRevision, selUid ? debug.inspect(file, selUid) : null)
+    property bool allProps: !!debug.options.elementsAll
+    property real propsW: 36
+
+    property string request: ""
+    property string status: ""
+    property bool sent: false
+    property bool showContext: false
+    property int menuUid: 0
+    property bool menuFolds: false
+    property string chosenTarget: ""
+    property string tabBlocks: (panes.list || []).map((p) => p.id).join(" ")
+    function awayOf(a) {
+        if (a.kind === "session") return "no pane";
+        if (!tabBlocks || tabBlocks.includes(a.block)) return "";
+        return a.current ? "other tab" : "other session";
+    }
+    property var targets: debug.agents.map((a) => ({ key: a.key, kind: a.kind, agent: a.agent,
+                                                     label: a.title ? a.title.replace(/^[^A-Za-z0-9]+/, "") : a.agent,
+                                                     detail: a.agent + " · " + (a.kind === "session" ? "live session" : a.sessionLabel || "pane") + (a.cwd ? " · " + short(a.cwd) : ""),
+                                                     away: awayOf(a),
+                                                     tag: a.key === debug.lastAgent ? "last used" : a.live ? "live" : "" }))
+        .concat([{ key: "new", kind: "new", agent: "claude", label: "New pane", detail: "claude beside the focused pane", tag: "" },
+                 { key: "inplace", kind: "inplace", agent: "claude -p", label: "In place", detail: "claude -p edits the file now", tag: "" }])
+    property string target: targets.some((t) => t.key === chosenTarget) ? chosenTarget
+                          : debug.lastAgent && targets.some((t) => t.key === debug.lastAgent) ? debug.lastAgent
+                          : (debug.agents.find((a) => a.current) || debug.agents[0] || {}).key || debug.options.agentTarget || "new"
+    property var targetInfo: targets.find((t) => t.key === target) || targets[targets.length - 2]
+    function stepTarget(d) {
+        const n = targets.length;
+        if (!n) return;
+        const i = Math.max(0, targets.findIndex((t) => t.key === target));
+        const t = targets[(i + d + n) % n];
+        chosenTarget = t.key;
+        debug.option("agentTarget", t.kind === "new" || t.kind === "inplace" ? t.key : null);
+    }
+    property string targetKind: targetInfo.kind
+    property var chatPane: debug.agents.find((a) => a.kind === "pane" && a.key === debug.lastAgent) || debug.agents.find((a) => a.kind === "pane") || null
+    property string hoverTarget: ""
+    property bool hoverChat: false
+    property var spotAgent: debug.agents.find((a) => a.key === (askWin.open ? hoverTarget || target : ctxMenu.open && hoverChat && chatPane ? chatPane.key : "")) || null
+    property string spotBlock: spotAgent && spotAgent.block ? spotAgent.block : ""
+    onSpotBlockChanged: debug.spotlight(spotBlock)
+    function openAsk(preset) {
+        if (preset) chosenTarget = preset;
+        status = ""; sent = false; showContext = false;
+        debug.findAgents();
+        askWin.open = true;
+    }
+    property int pickedSeen: -1
+    property int picked: debug.picked
+    onPickedChanged: { if (pickedSeen >= 0 && picked > pickedSeen && framed) { menuUid = selUid; menuFolds = false; ctxMenu.open = true; } if (pickedSeen >= 0) pickedSeen = picked; }
+    Timer { interval: 600; repeat: false; onTriggered: pickedSeen = debug.picked }
+    property string readme: (debug.here.path || "").includes("/src/ui/devtools/") ? debug.here.path.replace(/\/src\/ui\/devtools\/.*$/, "/README.md") : ""
+    function dir(p) { return (p || "").replace(/\/[^/]*$/, ""); }
+    property var chain: {
+        const at = rows.findIndex((r) => r.uid === selUid), out = [];
+        for (let j = at - 1, d = at >= 0 ? rows[at].depth : 0; j >= 0 && d > 0; j--) {
+            if (rows[j].depth < d) { out.unshift((rows[j].comp || rows[j].type) + (rows[j].id ? "#" + rows[j].id : "")); d = rows[j].depth; }
+        }
+        return out;
+    }
+    property string selLabel: info ? (info.comp || info.type) + (info.id ? "#" + info.id : "") : ""
+    property string selWhere: info ? info.file + ":" + info.line : ""
+    property var setProps: info ? info.props.filter((p) => !p.isDefault) : []
+    function context(req) {
+        const i = info;
+        if (!i) return "";
+        const written = i.file === short(file) ? file : dir(file) + "/" + i.file;
+        const props = setProps.map((p) => "  " + p.name + ": " + p.value + (p.binding ? "   (bound: " + p.binding + ")" : ""));
+        return [
+            "Change this element of a rexui dock (a .rui file: QML-style; it hot-reloads when saved" + (readme ? "; " + readme + " documents every element and property" : "") + ").",
+            "Element: " + (i.comp ? i.comp + " (a " + i.type + ")" : i.type) + (i.id ? " #" + i.id : ""),
+            "Written at: " + written + ":" + i.line + (written !== file ? "  (used in " + file + ")" : ""),
+            chain.length ? "Inside: " + chain.join(" > ") : "",
+            "Frame: x " + i.frame.x + ", y " + i.frame.y + ", " + i.frame.width + "×" + i.frame.height + " pt",
+            props.length ? "Properties set:\n" + props.join("\n") : "",
+            (i.handlers || []).length ? "Handlers: " + i.handlers.join(", ") : "",
+            req ? "\nRequest: " + req : "",
+        ].filter((l) => l).join("\n");
+    }
+    function addToChat(a) {
+        if (!a || !info) return;
+        debug.agentSend({ key: a.key, session: a.session, block: a.block, text: context(""), submit: false });
+    }
+    function ask(send) {
+        const req = request.trim(), text = context(req);
+        if (!text) return;
+        const a = debug.agents.find((x) => x.key === target);
+        if ((targetKind === "session" || targetKind === "inplace") && !req) { status = "Say what should change first."; return; }
+        if (a && a.kind === "session") {
+            debug.agentSend({ key: a.key, text: text });
+            status = "Sent into " + targetInfo.label;
+        } else if (a) {
+            debug.agentSend({ key: a.key, session: a.session, block: a.block, text: text, submit: send && !!req });
+            status = (send && req ? "Sent to " : "Added to the chat in ") + targetInfo.label;
+        } else if (target === "inplace") {
+            debug.agentRun({ text: text, cwd: dir(file) });
+            status = "Editing in place: its steps are in the Console";
+        } else {
+            debug.agentNew({ text: text, cwd: dir(file) });
+            status = "Started claude in a new pane";
+        }
+        askField.text = "";
+        request = "";
+        sent = true;
+        if (target !== "inplace") closeSoon.running = true;
+    }
+    Timer { id: closeSoon; interval: 1100; repeat: false; running: false; onTriggered: { running = false; askWin.open = false; } }
+    property int hot: 0
+    onHotChanged: debug.highlight(file, hot)
+
+    function isOpen(r, o) { return r.uid in o ? o[r.uid] : r.depth < 2; }
+    function visibleRows(all, o, f) {
+        const out = [];
+        const q = f.trim().toLowerCase();
+        if (q) return all.filter((r) => r.type.toLowerCase().includes(q) || (r.id || "").toLowerCase().includes(q) || (r.comp || "").toLowerCase().includes(q));
+        let hideBelow = Infinity;
+        for (const r of all) {
+            if (r.depth <= hideBelow) hideBelow = Infinity;
+            if (r.depth > hideBelow) continue;
+            if (r.children > 0 && !isOpen(r, o)) hideBelow = r.depth;
+            out.push(r);
+        }
+        return out;
+    }
+    function fold(r) {
+        const o = Object.assign({}, opened);
+        o[r.uid] = !isOpen(r, opened);
+        opened = o;
+    }
+    function openAround(uid) {
+        const i = rows.findIndex((r) => r.uid === uid);
+        if (i < 0) return;
+        const o = Object.assign({}, opened);
+        let depth = rows[i].depth;
+        for (let j = i - 1; j >= 0 && depth > 0; j--) {
+            if (rows[j].depth < depth) { o[rows[j].uid] = true; depth = rows[j].depth; }
+        }
+        opened = o;
+    }
+    function undoKey(key, mods) {
+        if (key !== "z" || mods !== "ctrl") return false;
+        const u = debug.undo();
+        if (u) debug.select(u.file, u.uid);
+        else console.log("nothing to undo");
+        return true;
+    }
+    function valueColor(v) {
+        if (!v.length) return dim;
+        if (v[0] === '"') return strColor;
+        if (/^-?[0-9.]/.test(v) || v === "true" || v === "false") return numColor;
+        return ink;
+    }
+    function short(p) { return (p || "").split("/").pop(); }
+
+    Rectangle {
+        color: raised; horizontalPadding: 10; verticalPadding: 10
+        Column {
+            spacing: 8
+            Row {
+                spacing: 4
+                Stack {
+                    grow: 1; height: 26
+                    Rectangle {
+                        radius: r; horizontalPadding: 8
+                        color: fileMenu ? hover : fileButton.hovered ? hover : "transparent"; colorAnimation: fade
+                        Row {
+                            valign: "center"; spacing: 6
+                            Icon { name: "doc.text"; font.size: 11; color: dim }
+                            Text { font.family: uiFont; text: short(file) || "No file"; font.size: 12; font.weight: "semibold"; color: ink; maxLines: 1 }
+                            Text { font.family: uiFont; visible: !!fileInfo; text: fileInfo ? fileInfo.type + (fileInfo.side ? " · " + fileInfo.side : "") : ""; font.size: 11; color: faint; maxLines: 1 }
+                            Item { grow: 1 }
+                            Icon { name: fileMenu ? "chevron.up" : "chevron.down"; font.size: 9; color: fileButton.hovered || fileMenu ? ink : dim; colorAnimation: fade }
+                        }
+                    }
+                    Button { focusable: false; id: fileButton; stateLayer: false; enabled: !fileMenu; onClicked: fileMenu = true }
+                }
+                Row {
+                    visible: !debug.here.pane; spacing: 2
+                    Stack {
+                        width: 26; height: 26
+                        Rectangle { radius: r; color: sideMenu || sideB.hovered ? hover : "transparent"; colorAnimation: fade }
+                        Stack { halign: "center"; valign: "center"; Icon { name: (sides.find((x) => x.s === mySide) || sides[0]).i; font.size: 12; color: sideMenu || sideB.hovered ? ink : dim; colorAnimation: fade } }
+                        Button { focusable: false; id: sideB; stateLayer: false; tip: "Dock side"; onClicked: sideMenu = !sideMenu }
+                    }
+                    Grid {
+                        visible: sideMenu; columns: 4; spacing: 2
+                        model: sides
+                        delegate: Stack {
+                            width: 26; height: 26
+                            Rectangle { radius: r; color: modelData.s === mySide ? blue : pickSideB.hovered ? hover : "transparent"; colorAnimation: fade }
+                            Stack { halign: "center"; valign: "center"; Icon { name: modelData.i; font.size: 12; color: modelData.s === mySide ? onBlue : pickSideB.hovered ? ink : dim; colorAnimation: fade } }
+                            Button { focusable: false; id: pickSideB; stateLayer: false; tip: "Dock " + modelData.s; onClicked: dockTo(modelData.s) }
+                        }
+                    }
+                }
+                Stack {
+                    visible: !debug.here.pane || !!debug.here.floating; width: 20; height: 26
+                    Rectangle { radius: r; color: gripB.hovered || dragging ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "line.3.horizontal"; font.size: 11; color: gripB.hovered || dragging ? ink : faint; colorAnimation: fade } }
+                    Button { focusable: false; id: gripB; stateLayer: false; drag: true; cursor: "move"; tip: debug.here.floating ? "Move" : ""
+                        onDragged: { dragging = true; if (debug.here.floating) debug.dragFloating(debug.here.path, "move"); else debug.dragToPane(devFile(me), "move"); }
+                        onDropped: { dragging = false; if (debug.here.floating) debug.dragFloating(debug.here.path, "drop"); else debug.dragToPane(devFile(me), "drop"); } }
+                }
+                Stack {
+                    visible: !debug.here.pane; width: 26; height: 26
+                    Rectangle { radius: r; color: popB.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "macwindow.on.rectangle"; font.size: 12; color: popB.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: popB; stateLayer: false; onClicked: popOut() }
+                }
+                Stack {
+                    visible: !debug.here.pane; width: 26; height: 26
+                    Rectangle { radius: r; color: paneB.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "rectangle.split.2x1"; font.size: 12; color: paneB.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: paneB; stateLayer: false; onClicked: toPane() }
+                }
+                Stack {
+                    visible: !debug.here.pane; width: 26; height: 26
+                    Rectangle { radius: r; color: hereB.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "rectangle.inset.filled"; font.size: 12; color: hereB.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: hereB; stateLayer: false; onClicked: openHere() }
+                }
+                Stack {
+                    visible: !!debug.here.pane; width: 26; height: 26
+                    Rectangle { radius: r; color: backB.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "sidebar.left"; font.size: 12; color: backB.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: backB; stateLayer: false; onClicked: backToDock() }
+                }
+                Stack {
+                    width: 26; height: 26
+                    Rectangle { radius: r; color: debug.picking ? blue : pickButton.hovered ? hover : "transparent"; colorAnimation: fade }
+                    Stack { halign: "center"; valign: "center"; Icon { name: "scope"; font.size: 13; color: debug.picking ? onBlue : pickButton.hovered ? ink : dim; colorAnimation: fade } }
+                    Button { focusable: false; id: pickButton; stateLayer: false; onClicked: debug.pick(!debug.picking) }
+                }
+            }
+            Rectangle {
+                height: 26; radius: r; color: field; border.width: 1; border.color: filter ? blue : line; colorAnimation: fade; horizontalPadding: 8
+                Row {
+                    valign: "center"; spacing: 6
+                    Icon { name: "line.3.horizontal.decrease"; font.size: 10; color: filter ? blue : faint; colorAnimation: fade }
+                    TextField { font.family: uiFont; grow: 1; text: filter; placeholder: "Filter by type, id or component"; font.size: 11.5; color: ink; onTextChanged: filter = text }
+                    Stack {
+                        visible: !!filter; width: 16; height: 16
+                        Stack { halign: "center"; valign: "center"; Icon { name: "xmark.circle.fill"; font.size: 11; color: clearF.hovered ? dim : faint; colorAnimation: fade } }
+                        Button { focusable: false; id: clearF; stateLayer: false; onClicked: filter = "" }
+                    }
+                }
+            }
+        }
+    }
+    Rectangle { height: 1; color: line }
+
+    Stack {
+        grow: 1
+        List {
+            spacing: 0; verticalPadding: 4; gutter: 8; fade: 0.04
+            virtualized: true; rowHeight: 22
+            model: allRows
+            reveal: allRows.findIndex((r) => r.uid === selUid)
+            revealAnimation: 220
+            delegate: Stack {
+                property bool sel: modelData.uid === selUid
+                Rectangle {
+                    horizontalPadding: 10; height: 22
+                    color: sel ? selColor : treeB.hovered ? hover : "transparent"; colorAnimation: fade
+                    opacity: modelData.visible ? 1 : 0.5
+                    Row {
+                        valign: "center"; spacing: 4
+                        Item { width: modelData.depth * 12; height: 1 }
+                        Stack {
+                            width: 12; height: 16; valign: "center"
+                            Stack {
+                                visible: modelData.children > 0; halign: "center"; valign: "center"
+                                Icon { name: isOpen(modelData, opened) ? "chevron.down" : "chevron.right"; font.size: 8; color: faint }
+                            }
+                        }
+                        Text { font.family: monoFont; text: modelData.comp || modelData.type; font.mono: true; font.size: 11.5; color: modelData.comp ? compColor : tagColor; maxLines: 1 }
+                        Text { font.family: monoFont; visible: !!modelData.comp; text: modelData.type; font.mono: true; font.size: 10; color: faint; maxLines: 1 }
+                        Text { font.family: monoFont; visible: !!modelData.id; text: "#" + modelData.id; font.mono: true; font.size: 11.5; color: idColor; maxLines: 1 }
+                        Item { grow: 1 }
+                        Text { font.family: monoFont;
+                            visible: modelData.width > 0 || modelData.height > 0
+                            text: modelData.width + "×" + modelData.height; font.mono: true; font.size: 10; color: sel || treeB.hovered ? dim : faint; colorAnimation: fade
+                        }
+                    }
+                }
+                Button {
+                    id: treeB; stateLayer: false
+                    onClicked: debug.select(file, modelData.uid)
+                    onDoubleClicked: if (modelData.children > 0) fold(modelData)
+                    onRightClicked: { debug.select(file, modelData.uid); menuUid = modelData.uid; menuFolds = modelData.children > 0; ctxMenu.open = true; }
+                    onHoveredChanged: { if (hovered) hot = modelData.uid; else if (hot === modelData.uid) hot = 0; }
+                }
+                Row {
+                    Item { width: 10 + modelData.depth * 12; height: 1 }
+                    Stack {
+                        visible: modelData.children > 0; width: 16; height: 22
+                        Button { focusable: false; stateLayer: false; onClicked: fold(modelData) }
+                    }
+                }
+            }
+        }
+        Column {
+            horizontalPadding: 8; verticalPadding: 6
+            Rectangle {
+                radius: r + 2; color: raised; border.width: 1; border.color: line; padding: 4
+                expanded: fileMenu; animate: 200; easing: "standard"
+                onPressedOutside: fileMenu = false
+                Column {
+                    spacing: 0
+                    List {
+                        maxHeight: 280; spacing: 1; gutter: 6
+                        model: files
+                        delegate: Stack {
+                            Rectangle {
+                                radius: r; horizontalPadding: 8; height: 26
+                                color: modelData.path === file ? selColor : rowB.hovered ? hover : "transparent"; colorAnimation: fade
+                                Row {
+                                    valign: "center"; spacing: 8
+                                    Rectangle { width: 6; height: 6; radius: 3; valign: "center"; color: modelData.error ? errColor : modelData.devtools ? faint : blue }
+                                    Text { font.family: uiFont; text: modelData.file; font.size: 12; color: ink; maxLines: 1 }
+                                    Item { grow: 1 }
+                                    Text { font.family: uiFont; text: modelData.type + (modelData.side ? " · " + modelData.side : "") + " · " + modelData.nodes; font.size: 10.5; color: faint; font.tabular: true; maxLines: 1 }
+                                }
+                            }
+                            Button { focusable: false; id: rowB; stateLayer: false; onClicked: { chosen = modelData.path; fileMenu = false; } }
+                        }
+                    }
+                    Column { verticalPadding: 4; horizontalPadding: 4; Rectangle { height: 1; color: line } }
+                    Stack {
+                        height: 28
+                        Rectangle { radius: r; color: ownB.hovered ? hover : "transparent"; colorAnimation: fade }
+                        Row {
+                            valign: "center"; horizontalPadding: 8; spacing: 8
+                            Icon { name: showOwn ? "checkmark.square.fill" : "square"; font.size: 11; color: showOwn ? blue : dim; colorAnimation: fade }
+                            Text { font.family: uiFont; text: "The debug UI's own files"; font.size: 11; color: dim }
+                        }
+                        Button { focusable: false; id: ownB; stateLayer: false; onClicked: showOwn = !showOwn }
+                    }
+                }
+            }
+        }
+    }
+
+    property real panelH: dragH >= 0 ? dragH : (debug.options.elementsSplit || 330)
+    property real dragH: -1
+    property real dragFrom: 0
+    property real namesW: dragW >= 0 ? dragW : (debug.options.elementsNames || 120)
+    property real dragW: -1
+    property real dragWFrom: 0
+    Stack {
+        visible: !!info; height: 7
+        Column { valign: "center"; Rectangle { height: splitB.hovered || dragH >= 0 ? 2 : 1; color: splitB.hovered || dragH >= 0 ? blue : line; colorAnimation: fade } }
+        Button {
+            id: splitB; stateLayer: false; drag: true; cursor: "resizeUpDown"
+            onDragged: { if (dragH < 0) dragFrom = panelH; dragH = Math.max(80, Math.min(900, dragFrom - dy)); }
+            onDropped: { debug.option("elementsSplit", Math.round(dragH)); dragH = -1; }
+        }
+    }
+    Column {
+        visible: !info; horizontalPadding: 12; verticalPadding: 12
+        Row {
+            spacing: 8
+            Icon { name: "cursorarrow.rays"; font.size: 12; color: faint }
+            Text { font.family: uiFont; grow: 1; text: rows.length ? "Select an element in the tree, or pick one (⌖)." : "Nothing to show."; font.size: 11.5; color: faint; wrap: true }
+        }
+    }
+    Column {
+        visible: !!info; height: panelH; spacing: 0
+        Rectangle {
+            color: raised; horizontalPadding: 10; verticalPadding: 8
+            Column {
+                spacing: 6
+                Row {
+                    spacing: 6
+                    Text { font.family: monoFont; text: info ? (info.comp || info.type) : ""; font.mono: true; font.size: 12.5; font.weight: "semibold"; color: info && info.comp ? compColor : tagColor; maxLines: 1 }
+                    Text { font.family: monoFont; visible: !!(info && info.id); text: info ? "#" + info.id : ""; font.mono: true; font.size: 12.5; color: idColor; maxLines: 1 }
+                    Item { grow: 1 }
+                    Text { font.family: monoFont; text: info ? info.file + ":" + info.line : ""; font.mono: true; font.size: 10.5; color: faint; maxLines: 1 }
+                }
+                Row {
+                    spacing: 4
+                    Rectangle {
+                        radius: r - 1; color: field; horizontalPadding: 6; verticalPadding: 2
+                        Text { font.family: monoFont; text: info ? "x " + info.frame.x : ""; font.mono: true; font.size: 10.5; color: dim }
+                    }
+                    Rectangle {
+                        radius: r - 1; color: field; horizontalPadding: 6; verticalPadding: 2
+                        Text { font.family: monoFont; text: info ? "y " + info.frame.y : ""; font.mono: true; font.size: 10.5; color: dim }
+                    }
+                    Rectangle {
+                        radius: r - 1; color: field; horizontalPadding: 6; verticalPadding: 2
+                        Text { font.family: monoFont; text: info ? "w " + info.frame.width : ""; font.mono: true; font.size: 10.5; color: dim }
+                    }
+                    Rectangle {
+                        radius: r - 1; color: field; horizontalPadding: 6; verticalPadding: 2
+                        Text { font.family: monoFont; text: info ? "h " + info.frame.height : ""; font.mono: true; font.size: 10.5; color: dim }
+                    }
+                    Item { grow: 1 }
+                    Stack {
+                        width: 2 * propsW + 4; height: 20
+                        Rectangle { radius: r; color: field; border.width: 1; border.color: line }
+                        Row {
+                            padding: 2
+                            Item { width: allProps ? propsW : 0; height: 1 }
+                            Rectangle { width: propsW; height: 16; radius: r - 2; color: selColor; animate: 280 }
+                        }
+                        Grid {
+                            columns: 2; padding: 2
+                            model: [{ all: false, l: "Set" }, { all: true, l: "All" }]
+                            delegate: Stack {
+                                height: 16
+                                Stack {
+                                    halign: "center"; valign: "center"
+                                    Text { font.family: uiFont; text: modelData.l; font.size: 10.5; font.weight: allProps === modelData.all ? "semibold" : "regular"; color: allProps === modelData.all || propsB.hovered ? ink : dim; colorAnimation: fade }
+                                }
+                                Button { focusable: false; id: propsB; stateLayer: false; tip: modelData.all ? "Every property of this element" : "Only the properties set on it"; onClicked: debug.option("elementsAll", modelData.all || null) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle { height: 1; color: line }
+        Row {
+            horizontalPadding: 10; verticalPadding: 4
+            Text { font.family: uiFont; text: "Property"; font.size: 10; color: faint; width: namesW; maxLines: 1 }
+            Stack {
+                width: 6; height: 14
+                Stack { halign: "center"; Rectangle { width: nameB.hovered || dragW >= 0 ? 2 : 1; height: 14; color: nameB.hovered || dragW >= 0 ? blue : line; colorAnimation: fade } }
+                Button {
+                    id: nameB; stateLayer: false; drag: true; cursor: "resizeLeftRight"
+                    onDragged: { if (dragW < 0) dragWFrom = namesW; dragW = Math.max(60, Math.min(300, dragWFrom + dx)); }
+                    onDropped: { debug.option("elementsNames", Math.round(dragW)); dragW = -1; }
+                }
+            }
+            Text { font.family: uiFont; text: "Value"; font.size: 10; color: faint }
+        }
+        Stack {
+            grow: 1
+            List {
+                spacing: 0; verticalPadding: 2; gutter: 8; fade: 0.04
+                onKeyPressed: { return undoKey(key, mods); }
+                model: info ? info.props.filter((p) => allProps || !p.isDefault)
+                            .concat((info.handlers || []).map((h) => ({ handler: h })))
+                            .concat(Object.entries(info.drawn || {}).map(([k, v]) => ({ drawn: k, value: String(v) }))) : []
+                delegate: Column {
+                    horizontalPadding: 10; verticalPadding: 3; spacing: 1
+                    Row {
+                        visible: !!modelData.name; spacing: 6
+                        Text { font.family: monoFont; text: modelData.name || ""; font.mono: true; font.size: 11; color: modelData.own ? compColor : modelData.native ? idColor : dim; width: namesW; maxLines: 1 }
+                        TextField { font.family: monoFont;
+                            property string shown: modelData.value || ""
+                            property bool typed: false
+                            onShownChanged: if (!typed) text = shown
+                            onTextChanged: if (text !== shown) typed = true
+                            grow: 1; font.mono: true; font.size: 11; color: valueColor(shown)
+                            onAccepted: {
+                                typed = false;
+                                const err = debug.edit(file, selUid, modelData.name, text);
+                                if (err) console.warn(err);
+                            }
+                            onCancelled: { typed = false; text = shown; }
+                        }
+                    }
+                    Text { font.family: monoFont;
+                        visible: !!modelData.binding
+                        text: "= " + (modelData.binding || ""); font.mono: true; font.size: 10; font.italic: true; color: faint; wrap: true; maxLines: 2
+                    }
+                    Row {
+                        visible: !!modelData.handler; spacing: 6
+                        Text { font.family: monoFont; text: modelData.handler || ""; font.mono: true; font.size: 11; color: numColor; width: namesW; maxLines: 1 }
+                        Text { font.family: uiFont; text: "handler"; font.size: 10; color: faint }
+                    }
+                    Row {
+                        visible: !!modelData.drawn; spacing: 6
+                        Text { font.family: monoFont; text: modelData.drawn || ""; font.mono: true; font.size: 11; color: faint; width: namesW; maxLines: 1 }
+                        Text { font.family: monoFont; text: modelData.value || ""; font.mono: true; font.size: 11; color: dim }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        width: 0; height: 0
+        Drawer {
+            id: ctxMenu
+            placement: "pointer"; color: raised; rounding: ar; animation: 120
+            onClosed: open = false
+            onOpenChanged: if (open) debug.findAgents()
+            Column {
+                width: 248; spacing: 0; radius: ar; border.width: 1; border.color: line
+                Column {
+                    horizontalPadding: 10; verticalPadding: 7; spacing: 1
+                    Text { font.family: monoFont; text: selLabel || "Element"; font.mono: true; font.size: 11.5; font.weight: "semibold"; color: info && info.comp ? compColor : tagColor; maxLines: 1 }
+                    Text { font.family: monoFont; text: selWhere; font.mono: true; font.size: 10; color: faint; maxLines: 1 }
+                }
+                Rectangle { height: 1; color: line }
+                Grid {
+                    columns: 1; spacing: 0
+                    model: [
+                        { act: "ask", title: "Ask an agent…", on: true },
+                    ].concat(chatPane ? [{ act: "chat", title: "Add to chat · " + (chatPane.title ? chatPane.title.replace(/^[^A-Za-z0-9]+/, "") : chatPane.agent), on: true }] : []).concat([
+                        { act: "inplace", title: "Edit in place…", on: true },
+                        { sep: true },
+                        { act: "reveal", title: "Show in the tree", on: true },
+                    ]).concat(menuFolds ? [{ act: "fold", title: "Fold or unfold", on: true }] : [])
+                    delegate: Stack {
+                        Rectangle { visible: !!modelData.sep; height: 1; color: line }
+                        Stack {
+                            visible: !modelData.sep
+                            Row {
+                                horizontalPadding: 10; height: 26
+                                color: itemB.hovered && modelData.on ? hover : "transparent"; colorAnimation: 80
+                                Text { font.family: uiFont; text: modelData.title || ""; font.size: 12; color: modelData.on ? ink : faint; maxLines: 1 }
+                            }
+                            Button {
+                                id: itemB; stateLayer: false; enabled: !!modelData.on
+                                onHoveredChanged: if (modelData.act === "chat") hoverChat = hovered
+                                onClicked: {
+                                    ctxMenu.open = false;
+                                    if (modelData.act === "ask") openAsk("");
+                                    else if (modelData.act === "inplace") openAsk("inplace");
+                                    else if (modelData.act === "chat") addToChat(chatPane);
+                                    else if (modelData.act === "reveal") { chosen = ""; debug.highlight(file, selUid); }
+                                    else if (modelData.act === "fold") { const r = rows.find((x) => x.uid === menuUid); if (r) fold(r); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Drawer {
+            id: askWin
+            placement: "top"; flare: "none"; color: bg; rounding: ar; animation: 180; resizable: false
+            onOpenChanged: if (open) { askField.text = ""; request = ""; askField.forceActiveFocus(); }
+            onClosed: open = false
+            Column {
+                width: 600; spacing: 0; radius: ar; border.width: 1; border.color: line
+                Row {
+                    horizontalPadding: 12; height: 28; spacing: 6; color: raised
+                    Text { font.family: monoFont; visible: chain.length > 0; text: chain.slice(-2).join(" › ") + " ›"; font.mono: true; font.size: 10.5; color: faint; maxLines: 1 }
+                    Text { font.family: monoFont; text: selLabel || "Select an element first"; font.mono: true; font.size: 10.5; font.weight: "semibold"; color: !info ? dim : info.comp ? compColor : tagColor; maxLines: 1 }
+                    Item { grow: 1 }
+                    Text { font.family: monoFont; text: selWhere; font.mono: true; font.size: 10.5; color: faint; maxLines: 1 }
+                    Text { font.family: monoFont; text: info ? info.frame.width + "×" + info.frame.height : ""; font.mono: true; font.size: 10.5; color: dim }
+                    Stack {
+                        width: 18; height: 18
+                        Stack { halign: "center"; valign: "center"; Icon { name: "xmark"; font.size: 9; color: winX.hovered ? ink : faint; colorAnimation: fade } }
+                        Button { focusable: false; id: winX; stateLayer: false; onClicked: askWin.open = false }
+                    }
+                }
+                Rectangle { height: 1; color: line }
+                Stack {
+                    Row { visible: !request; horizontalPadding: 12; height: 44
+                        Text { font.family: uiFont; text: "What should change?"; font.size: 14; color: faint } }
+                    Row {
+                        horizontalPadding: 12; height: 44
+                        TextField { id: askField; font.family: uiFont; grow: 1; text: request; font.size: 14; color: ink
+                            arrows: true
+                            onArrow: stepTarget(direction === "down" ? 1 : -1)
+                            onKeyPressed: { if (mods.indexOf("ctrl") >= 0 && (key === "t" || key === "n")) { stepTarget(key === "t" ? 1 : -1); return true; } return false; }
+                            onTextChanged: request = text
+                            onAccepted: ask(true)
+                            onCancelled: askWin.open = false }
+                    }
+                }
+                Rectangle { height: 1; color: request ? blue : line; colorAnimation: fade }
+                Row {
+                    horizontalPadding: 12; height: 26; spacing: 6
+                    Text { font.family: uiFont; text: "Send to"; font.size: 10.5; color: faint }
+                    Text { font.family: uiFont; visible: debug.agentsFinding; text: "looking in Rex's panes…"; font.size: 10.5; color: faint }
+                    Item { grow: 1 }
+                    Stack {
+                        width: 18; height: 18
+                        Stack { halign: "center"; valign: "center"; Icon { name: "arrow.clockwise"; font.size: 9; color: findB.hovered ? ink : faint; colorAnimation: fade } }
+                        Button { focusable: false; id: findB; stateLayer: false; onClicked: debug.findAgents() }
+                    }
+                }
+                Grid {
+                    columns: 1; spacing: 0
+                    model: targets
+                    delegate: Stack {
+                        property bool on: target === modelData.key
+                        Rectangle { height: 26; color: on ? selColor : tgtB.hovered ? hover : "transparent"; colorAnimation: fade }
+                        Rectangle { width: 2; height: 26; color: on ? blue : "transparent"; colorAnimation: fade }
+                        Row {
+                            horizontalPadding: 12; height: 26; spacing: 8
+                            Text { font.family: uiFont; text: modelData.label; font.size: 12; font.weight: on ? "semibold" : "regular"; color: modelData.away ? dim : ink; maxLines: 1 }
+                            Rectangle { visible: !!spotAgent && spotAgent.key === modelData.key && !modelData.away; width: 5; height: 5; radius: 0; color: blue }
+                            Text { font.family: uiFont; grow: 1; text: modelData.detail; font.size: 10.5; color: on ? dim : faint; maxLines: 1 }
+                            Text { font.family: monoFont; visible: !!modelData.tag; text: modelData.tag || ""; font.mono: true; font.size: 10; color: dim }
+                            Text { font.family: monoFont; visible: !!modelData.away; text: modelData.away || ""; font.mono: true; font.size: 10; color: modelData.away === "no pane" ? faint : warnColor }
+                        }
+                        Button { focusable: false; id: tgtB; stateLayer: false
+                            onClicked: { chosenTarget = modelData.key; debug.option("agentTarget", modelData.kind === "new" || modelData.kind === "inplace" ? modelData.key : null); }
+                            onHoveredChanged: { if (hovered) hoverTarget = modelData.key; else if (hoverTarget === modelData.key) hoverTarget = ""; } }
+                    }
+                }
+                Item { height: 6; width: 1 }
+                Rectangle { height: 1; color: line }
+                Rectangle {
+                    visible: showContext; color: field; horizontalPadding: 12; verticalPadding: 8
+                    Text { font.family: monoFont; text: context(request.trim()); font.mono: true; font.size: 10.5; color: dim; wrap: true; maxLines: 16 }
+                }
+                Rectangle { visible: showContext; height: 1; color: line }
+                Row {
+                    horizontalPadding: 12; height: 38; spacing: 8; color: raised
+                    Stack {
+                        Row {
+                            spacing: 5
+                            Icon { name: showContext ? "chevron.down" : "chevron.right"; font.size: 8; color: ctxB.hovered ? ink : faint; colorAnimation: fade }
+                            Text { font.family: uiFont; text: "Context"; font.size: 11; color: ctxB.hovered ? ink : dim; colorAnimation: fade }
+                        }
+                        Button { focusable: false; id: ctxB; stateLayer: false; onClicked: showContext = !showContext }
+                    }
+                    Text { font.family: uiFont; grow: 1; align: "right"; text: debug.agentRunning && target === "inplace" ? "Editing in place: its steps are in the Console" : status || (request.trim() ? "↵ send   esc close" : ""); font.size: 11; color: sent ? okColor : status ? warnColor : faint; colorAnimation: fade; maxLines: 1 }
+                    Stack {
+                        visible: debug.agentRunning
+                        Rectangle { radius: ar; horizontalPadding: 10; height: 24; color: stopB.hovered ? hover : "transparent"; border.width: 1; border.color: line; colorAnimation: fade
+                            Stack { halign: "center"; valign: "center"; Text { font.family: uiFont; text: "Stop"; font.size: 11.5; color: errColor } } }
+                        Button { focusable: false; id: stopB; stateLayer: false; onClicked: debug.agentStop() }
+                    }
+                    Stack {
+                        visible: targetKind === "pane"
+                        Rectangle { radius: ar; horizontalPadding: 10; height: 24; color: chatB.hovered ? hover : "transparent"; border.width: 1; border.color: line; colorAnimation: fade
+                            Stack { halign: "center"; valign: "center"; Text { font.family: uiFont; text: "Add to chat"; font.size: 11.5; color: ink } } }
+                        Button { focusable: false; id: chatB; stateLayer: false; onClicked: ask(false) }
+                    }
+                    Stack {
+                        visible: !!request.trim() && !(debug.agentRunning && target === "inplace")
+                        Rectangle { radius: ar; horizontalPadding: 12; height: 24; color: blue; opacity: sendB.hovered ? 0.88 : 1; opacityAnimation: 80
+                            Stack { halign: "center"; valign: "center"; Text { font.family: uiFont; text: target === "inplace" ? "Edit" : "Send"; font.size: 11.5; font.weight: "semibold"; color: onBlue } } }
+                        Button { focusable: false; id: sendB; stateLayer: false; onClicked: ask(true) }
+                    }
+                }
+            }
+        }
+
+    }
+}

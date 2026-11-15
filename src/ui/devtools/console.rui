@@ -1,0 +1,8 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Dock {
+    side: debug.options["dock console.rui"] || "bottom"; height: 260; width: 460; padding: 0; spacing: 0
+    title: "Console"; icon: "terminal"
+    visible: debug.here.pane || (debug.enabled && !debug.options["hidden console.rui"] && !(debug.panedFiles || []).includes("console.rui"))
+    ConsolePanel { grow: 1 }
+}

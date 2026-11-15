@@ -1,0 +1,17 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 520
+    group: "side"; title: "Twitch"; iconColor: "#9146ff"
+    icon: web.favicon || "play.tv.fill"
+    key: "cmd+shift+t"
+
+    Rectangle {
+        grow: 1; radius: 10
+        WebView {
+            id: web
+            cookies: "zen"
+            url: "https://www.twitch.tv"
+        }
+    }
+}

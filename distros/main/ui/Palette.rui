@@ -1,0 +1,67 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Item {
+    id: colours
+    width: 0; height: 0; visible: false
+    property string chosen: "caelestia"
+    property bool lightMode: false
+    property var caelestia: ({
+        "caelestia/rose/dark": "191114 261d20 31282a 3c3235 ffb0ca 541d34 6f334a ffd9e3 e2bdc7 422932 5a3f48 ffd9e3 f0bc95 b5ccba efdfe2 d5c2c6 9e8c91 514347",
+        "caelestia/rose/light": "fff8f8 faeaed f4e4e7 efdfe2 8b4a62 ffffff ffd9e3 6f334a 74565f ffffff ffd9e3 5a3f48 7d5636 4e6355 22191c 514347 837377 d5c2c6",
+        "caelestia/teal/dark": "0a0f0f 131b1a 192120 1d2827 9bd0cc 0d4845 255b58 b8ede9 b0ccc9 2c4543 27403e a9c5c2 d5efff b5ccba dce8e6 a2adac 6d7876 3f4a49",
+        "caelestia/teal/light": "f6faf9 e7f0ee e1eae8 d9e5e3 1c6a66 e1fffc a8f0eb 015c59 4a6462 e2fffc cce8e5 3d5654 37647b 4f6354 2a3433 566160 727d7c a9b4b3",
+        "catppuccin/mocha/dark": "131317 201f23 2a292e 353438 c2c1ff 2a2a60 7171ac ffffff c6c4e0 2e2e44 45455c b4b2ce f5b2e0 b5ccba e5e1e7 c8c5d1 918f9a 47464f",
+        "catppuccin/macchiato/dark": "131317 1f1f23 2a2a2e 353438 bac3ff 232c60 6a73ac ffffff c3c5e0 2c2f44 42455c b1b3ce f1b3e5 b5ccba e4e1e7 c6c5d1 90909a 46464f",
+        "catppuccin/frappe/dark": "131317 1f1f23 292a2e 343438 b7c4ff 1e2d60 6674ac ffffff c1c5e0 2a2f44 41465c afb4ce f1b3e6 b5ccba e4e1e7 c6c5d1 8f909a 45464f",
+        "catppuccin/latte/light": "f8f9fc edeef1 e7e8eb e1e2e6 3e7b9f ffffff 417da2 00060c 4c6170 ffffff cfe5f8 526776 8f659a 4f6354 191c1e 41484e 6e757c c0c7ce",
+        "darkgreen/medium/dark": "1e1e24 23262c 1b1d22 232c29 24bd5c 091f11 232c29 24bd5c 24bd5c 043a14 232c29 f4f3f5 32653e b5ccba f5f5f6 c9c9c9 979797 1e1e25",
+        "darkgreen/hard/dark": "050505 0a0a0b 050505 0f1210 24bd5c 091f11 0f1210 24bd5c 24bd5c 043a14 0f1210 f4f3f5 32653e b5ccba f5f5f6 c9c9c9 838383 1e1e25",
+        "dracula/medium/dark": "343746 3e4153 4d4f66 565970 bd93f9 282a36 4d4f66 bd93f9 50fa7b 282a36 4d4f66 50fa7b ff79c6 50fa7b f8f8f2 f8f8f2 6272a4 4d4f66",
+        "everblush/medium/dark": "232a2d 2e3538 3a4145 434a4e 8ccfb0 141b1e 3a4145 8ccfb0 e5c76b 141b1e 3a4145 e5c76b e5a5c5 8ccfb0 e8e8e8 b3b9be 8a8f94 3a4145",
+        "everforest/medium/dark": "343f44 3d484d 475258 4c5258 7fbbb3 2d353b 475258 a7c080 83c092 2d353b 475258 a7c080 a7c080 a7c080 d3c6aa 9da9a0 859289 475258",
+        "everforest/medium/light": "f3ead3 f3ead3 eae4ca e0dcc7 3a94c5 fffbf0 e0dcc7 8da101 35a77c fffbf0 e0dcc7 8da101 8da101 8da101 5c6a72 6f7c84 939f91 e0dcc7",
+        "everforest/hard/dark": "252b2e 2e383c 343e43 3a4448 7fbbb3 1e2326 414b50 a7c080 83c092 1e2326 414b50 a7c080 a7c080 a7c080 d3c6aa 9da9a0 859289 414b50",
+        "everforest/soft/dark": "3a454a 434e53 4d585d 525c61 7fbbb3 323c41 4d585d a7c080 83c092 323c41 4d585d a7c080 a7c080 a7c080 d3c6aa 9da9a0 859289 4d585d",
+        "gruvbox/medium/dark": "101415 1c2021 272b2b 313536 81d3e0 00363d 28828e 000608 adccd1 173539 2f4b50 9cbac0 ddb9f7 b5ccba e0e3e4 bec8ca 889394 3e494a",
+        "gruvbox/medium/light": "fef9ee f3ede3 ede8dd e7e2d8 6b5f10 ffffff 827526 fffbff 655f3c ffffff ede3b7 6c6542 5c7e43 4f6354 1d1c15 4a4738 797564 ccc6b3",
+        "gruvbox/hard/dark": "101415 1c2021 272b2c 323537 85d2e7 003640 2d8194 000609 aecbd4 18343b 304b52 9dbac3 e1b7f5 b5ccba e0e3e4 bec8cc 889296 3f484b",
+        "gruvbox/hard/light": "fdf9ef f2eee4 ece8de e6e2d8 636116 ffffff 7a772c fffbff 62603e ffffff e8e4ba 686644 547f4a 4f6354 1c1c16 494739 777565 cac7b4",
+        "gruvbox/soft/dark": "18120e 241e1a 2f2924 3a332e ffb878 4c2700 c28349 0d0400 e5bfa1 432b16 5c412a d3ae90 c6cc7a b5ccba ece0d9 d6c3b5 9f8e81 52443a",
+        "gruvbox/soft/light": "fff9ee f3ede3 eee7dd e8e2d8 867425 ffffff 887627 070500 675e3c ffffff efe2b7 6d6441 5f7d41 4f6354 1d1b15 4b4738 7a7464 cdc6b3",
+        "nord/medium/dark": "3b4252 434c5e 4c566a 55606e 88c0d0 2e3440 4c566a 88c0d0 81a1c1 2e3440 4c566a 81a1c1 5e81ac a3be8c eceff4 d8dee9 616e88 4c566a",
+        "oldworld/default/dark": "121317 1e2023 292a2e 343538 aac7ff 0b3060 5a77ab ffffff bcc7df 263144 3d475b abb5ce ecb4ed b5ccba e3e2e7 c4c6d0 8e909a 43474f",
+        "onedark/default/dark": "121317 1e2023 292a2d 333538 a8c8ff 05305f 7292c6 000513 bbc7df 253144 3c475b aab5cd ebb5ec b5ccba e3e2e7 c3c6d0 8d919a 43474f",
+        "rosepine/main/dark": "141317 201f23 2b292e 363438 c9bfff 31285f 786fab ffffff c9c3e0 312e44 48445b b7b1ce f9b1dc b5ccba e5e1e7 c9c4d0 938f9a 48454f",
+        "rosepine/moon/dark": "141317 201f23 2a292e 353438 c6bfff 2e2960 7670ac 040025 c8c3e0 302e44 47445c b6b2ce f9b1dd b5ccba e5e1e7 c9c5d0 928f9a 47454f",
+        "rosepine/dawn/light": "fff8f0 f4ede3 eee7dd e8e2d7 897324 ffffff 8b7526 070500 695e3b ffffff f1e2b6 6f6441 647d3e 4f6354 1e1b15 4c4638 7b7464 cec6b3",
+        "shadotheme/default/dark": "131317 1f1f23 2a292e 353438 bfc1ff 282b60 6f72ac 000028 c5c4e0 2e2f44 44455c b3b3ce f4b2e2 b5ccba e5e1e7 c7c5d1 918f9a 46464f",
+        "solarized/medium/dark": "073642 094b59 0d4250 11505e 268bd2 002b36 0d4250 268bd2 2aa198 002b36 0d4250 2aa198 6c71c4 859900 fdf6e3 93a1a1 586e75 0d4250",
+        "tokyonight/medium/dark": "24283b 2a2f41 3b4261 414868 7aa2f7 1a1b26 3b4261 7aa2f7 9ece6a 1a1b26 3b4261 9ece6a bb9af7 9ece6a c0caf5 a9b1d6 565f89 3b4261"
+    })
+    property var palettes: withRex(caelestia)
+    function withRex(table) {
+        const all = Object.assign({}, table);
+        for (const p of (rex.themes().palettes || [])) all[p[0]] = p[1];
+        return all;
+    }
+    function pick(name, light) {
+        const mode = light ? "/light" : "/dark";
+        const [family, flavour] = String(name).split("/");
+        const keys = Object.keys(palettes);
+        const mine = keys.filter((k) => k.startsWith(family + "/") && (!flavour || k.split("/")[1] === flavour));
+        const key = mine.find((k) => k.endsWith(mode)) || mine[0] ||
+                    (light ? "caelestia/rose/light" : "caelestia/rose/dark");
+        const v = palettes[key].split(" ").map((c) => "#" + c);
+        return { key, surface: v[0], container: v[1], containerHigh: v[2], containerHighest: v[3], primary: v[4], onPrimary: v[5], primaryContainer: v[6], onPrimaryContainer: v[7], secondary: v[8], onSecondary: v[9], secondaryContainer: v[10], onSecondaryContainer: v[11], tertiary: v[12], success: v[13], ink: v[14], inkDim: v[15], outline: v[16], outlineVariant: v[17] };
+    }
+    property var pal: pick(chosen, lightMode)
+    function schemes() {
+        const out = [];
+        for (const k of Object.keys(palettes)) {
+            const s = k.split("/").slice(0, 2).join("/");
+            if (!out.includes(s)) out.push(s);
+        }
+        return out;
+    }
+    function current() { return pal.key.split("/").slice(0, 2).join("/"); }
+}

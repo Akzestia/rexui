@@ -1,0 +1,17 @@
+{
+  "grammars": [
+    {
+      "name": "rui",
+      "camelcase": "Rui",
+      "scope": "source.rui",
+      "path": ".",
+      "file-types": ["rui"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "rexui's .rui files (README: Docks), on tree-sitter-javascript 0.25.0"
+  }
+}

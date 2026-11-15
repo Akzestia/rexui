@@ -1,0 +1,19 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: MIT
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_library(
+    name = "frames",
+    hdrs = ["rexui_frames.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "proto",
+    hdrs = ["rexui_proto.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["rexui_frames.h"])

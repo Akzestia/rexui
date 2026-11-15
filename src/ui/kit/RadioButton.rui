@@ -1,0 +1,20 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Stack {
+    id: radio
+    property string text: ""
+    property bool checked: false
+    property bool enabled: true
+    property var tint: "accent"
+    signal clicked
+    opacity: enabled ? 1 : 0.4
+    Row {
+        spacing: 8; valign: "center"
+        Rectangle {
+            width: 16; height: 16; radius: 8; color: "transparent"; border.width: radio.checked ? 5 : 1
+            border.color: radio.checked ? radio.tint : theme.dark ? "#66ffffff" : "#66000000"; colorAnimation: 100
+        }
+        Text { visible: radio.text.length > 0; text: radio.text; shrink: 1 }
+    }
+    Button { stateLayer: false; enabled: radio.enabled; cursor: "pointer"; onClicked: radio.clicked() }
+}

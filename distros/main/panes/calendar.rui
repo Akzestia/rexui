@@ -1,0 +1,90 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    title: "Calendar"; icon: "calendar"
+    padding: 28; halign: "center"; valign: "center"
+    color: surface
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var colors: prefs.state.colors
+    property bool light: colors ? !!colors.light : !theme.dark
+    property var rose: (light ? "fff8f8 faeaed f4e4e7 efdfe2 8b4a62 ffffff ffd9e3 6f334a 74565f ffffff ffd9e3 5a3f48 7d5636 4e6355 22191c 514347 837377 d5c2c6"
+                              : "191114 261d20 31282a 3c3235 ffb0ca 541d34 6f334a ffd9e3 e2bdc7 422932 5a3f48 ffd9e3 f0bc95 b5ccba efdfe2 d5c2c6 9e8c91 514347").split(" ").map((c) => "#" + c)
+    property var pal: colors ? ["surface", "container", "containerHigh", "containerHighest", "primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "success", "ink", "inkDim", "outline", "outlineVariant"].map((k) => colors[k]) : rose
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHighest: pal[3]
+    property var primary: pal[4]
+    property var onPrimary: pal[5]
+    property var secondary: pal[8]
+    property var tertiary: pal[12]
+    property var ink: pal[14]
+    property var inkDim: pal[15]
+    property var outline: pal[16]
+
+    property var now: new Date()
+    property var today: now.toDateString()
+    property int shift: 0
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+    function two(n) { return String(n).padStart(2, "0"); }
+
+    property var month: {
+        const t = new Date(today), first = new Date(t.getFullYear(), t.getMonth() + shift, 1);
+        const start = new Date(first);
+        start.setDate(1 - (first.getDay() + 6) % 7);
+        const days = [];
+        for (let k = 0; k < 42; k++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + k);
+            days.push({ day: d.getDate(), inMonth: d.getMonth() === first.getMonth(), today: d.toDateString() === today, weekend: k % 7 > 4 });
+        }
+        return { title: first.toLocaleDateString(i18n.locale, { month: "long", year: "numeric" }), days };
+    }
+
+    Row {
+        spacing: 36; valign: "center"
+        Column {
+            spacing: 4
+            Row {
+                spacing: 0; valign: "bottom"
+                Text { text: two(now.getHours()) + ":" + two(now.getMinutes()); font.size: 96; font.weight: "thin"; color: ink }
+                Text { text: two(now.getSeconds()); font.size: 28; font.weight: "light"; color: primary }
+            }
+            Text { text: now.toLocaleDateString(i18n.locale, { weekday: "long" }); font.size: 22; font.weight: "medium"; color: primary }
+            Text { text: now.toLocaleDateString(i18n.locale, { day: "numeric", month: "long", year: "numeric" }); font.size: 16; color: inkDim }
+        }
+        Rectangle {
+            width: 336; radius: 28; color: container; padding: 18
+            Column {
+                spacing: 10
+                Row {
+                    spacing: 4
+                    Text { text: month.title; font.size: 16; font.weight: "semibold"; color: ink; colorAnimation: 160 }
+                    Item { grow: 1 }
+                    Button { icon: "chevron.left"; color: inkDim; onClicked: shift -= 1 }
+                    Button { icon: "circle.fill"; font.size: 6; color: shift ? primary : outline; enabled: shift !== 0; onClicked: shift = 0 }
+                    Button { icon: "chevron.right"; color: inkDim; onClicked: shift += 1 }
+                }
+                Grid {
+                    columns: 7
+                    model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+                    delegate: Text { text: modelData; align: "center"; font.size: 11; font.weight: "semibold"; color: index > 4 ? tertiary : outline }
+                }
+                Grid {
+                    columns: 7; spacing: 2
+                    model: month.days
+                    delegate: Stack {
+                        height: 38; halign: "center"; valign: "center"
+                        Rectangle { width: 36; height: 36; radius: 18; color: modelData.today ? primary : "transparent" }
+                        Text {
+                            text: String(modelData.day); align: "center"; font.size: 13
+                            font.weight: modelData.today ? "bold" : "regular"
+                            color: modelData.today ? onPrimary : !modelData.inMonth ? outline : modelData.weekend ? tertiary : ink
+                            opacity: modelData.inMonth ? 1 : 0.45
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

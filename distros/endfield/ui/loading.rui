@@ -1,0 +1,235 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    id: ld
+    animation: 560
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property bool gameMarks: logoOpt === "game" && !!files.stat(brandDir + "tri.png")
+    property bool gameWord: gameMarks && !!files.stat(brandDir + "wordmark.png")
+    property string logoPicture: logoOpt !== "game" && logoOpt !== "emblem" ? logoOpt : ""
+    property bool ownEmblem: !gameMarks && !logoPicture
+    property var markInk: light ? "#141519" : accentName === "valley" ? valley : "#f0f0f2"
+    property var wordInk: light ? "#141519" : "#f0f0f2"
+
+    property string mediaOpt: conf.values["endfield-loading"] || ""
+    property string media: !mediaOpt ? "" : /^[~\/]/.test(mediaOpt) ? mediaOpt : "~/.config/rex/distros/endfield/" + mediaOpt
+    property bool movie: /\.(mp4|mov|m4v)$/i.test(media)
+    property var started: new Date()
+    property string stamp: started.getFullYear() + "." + two(started.getMonth() + 1) + "." + two(started.getDate()) + "  " + two(started.getHours()) + ":" + two(started.getMinutes())
+    property real shown: 0
+    property real lastTick: 0
+    Timer {
+        interval: 16; repeat: true; running: !leaving && shown < 1
+        onTriggered: {
+            var now = Date.now();
+            var dt = lastTick ? Math.min(0.1, (now - lastTick) / 1000) : 0.016;
+            lastTick = now;
+            var target = Math.min(1, loading.progress || 0);
+            if (shown < target) shown = Math.min(target, shown + dt / (motion ? 1.4 : 0.3));
+        }
+    }
+    property real fill: Math.max(0.004, Math.min(1, shown))
+    property string count: ("00" + Math.round(fill * 100)).slice(-3)
+    property string stage: loading.stage
+    property var log: []
+    onStageChanged: if (stage) log = log.concat([stage.indexOf("web-") === 0 ? "web" : stage]).slice(-5)
+    property bool minDone: false
+    property bool leaving: false
+    property bool go: loading.ready && minDone && shown >= 1
+    onGoChanged: if (go && !leaving) leaving = true
+    Timer { interval: motion ? 1900 : 400; repeat: false; running: true; onTriggered: minDone = true }
+    Timer { interval: 340; repeat: false; running: leaving; onTriggered: loading.finish() }
+    property var tips: [
+        [qsTr("The wheel"), "cmd+e", qsTr("Every section of the HUD, round the panes.")],
+        [qsTr("The Terminal"), "cmd+shift+space", qsTr("Time, squad and regional development, beside the rail.")],
+        [qsTr("Controls"), "cmd+shift+?", qsTr("Every shortcut there is, as keycaps.")],
+        [qsTr("Panes"), "", qsTr("Right click a pane for its background and frame.")],
+        [qsTr("Settings"), "cmd+,", qsTr("endfield's own: the accent, motion, the boot, the logo.")],
+    ]
+    property var advice: tips[started.getSeconds() % tips.length]
+
+    Stack {
+        grow: 1
+        Rectangle { color: surface }
+        Video { visible: movie; source: movie ? media : ""; loop: true; muted: true; fit: "cover"; playing: movie && !leaving }
+        Image { visible: !!media && !movie; source: !movie ? media : ""; fit: "cover" }
+        Shader { visible: !media; source: "shaders/contour.metal"; running: motion && !leaving && !media; fps: 30; params: [11, 320, 0.012, 0.7, 0, 0.6]; colors: [alpha(ink, 0.06), alpha(signal, 0.16)] }
+        Shader { visible: !media; source: "shaders/dots.metal"; running: false; params: [17, 0.8, 0.2, 0.45]; colors: [alpha(ink, 0.08)] }
+        Brackets { visible: !media; inset: 20; arm: 18; weight: 2; flicker: true; tint: alpha(ink, 0.28) }
+
+        Column {
+            visible: !media
+            opacity: leaving ? 0 : 1; opacityAnimation: 320
+            Column {
+                padding: 52; spacing: 0
+                Row {
+                    spacing: 12; valign: "center"
+                    Band { }
+                    Text { text: "RX.LINK"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 9; font.letterSpacing: 0.6; color: primary }
+                    Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 9; color: faint }
+                    Text { text: caps(qsTr("Terminal")); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 1.2; color: caption }
+                    Item { grow: 1 }
+                    Text { text: stamp; font.family: fontMono; font.mono: true; font.size: 9; font.tabular: true; font.letterSpacing: 0.6; color: faint }
+                }
+            }
+            Item { grow: 1 }
+            Row {
+                Item { grow: 1 }
+                Column {
+                    spacing: 18; halign: "center"
+                    Stack {
+                        width: 420; height: 210
+                        appear: motion ? "flicker" : ""; appearDelay: 260; appearDuration: 520
+                        Shader { visible: gameWord; source: "shaders/mark.metal"; image: gameWord ? brandDir + "wordmark.png" : ""; colors: [wordInk]; running: false }
+                        Shader { visible: gameMarks && !gameWord; source: "shaders/mark.metal"; image: gameMarks && !gameWord ? brandDir + "tri.png" : ""; colors: [markInk]; running: false }
+                        Image { visible: !!logoPicture; source: logoPicture; fit: "contain" }
+                        Row {
+                            visible: ownEmblem
+                            Item { grow: 1 }
+                            Shader { width: 150; height: 150; source: "shaders/emblem.metal"; colors: [signal, valley]; params: [0.35, 1, 1, 1.4]; running: motion && !leaving; fps: 30 }
+                            Item { grow: 1 }
+                        }
+                    }
+                    Text {
+                        text: caps(qsTr("Establishing link")); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 4.5; color: inkDim
+                        scramble: motion ? 900 : 0; scrambleSet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/#"
+                    }
+                }
+                Item { grow: 1 }
+            }
+            Item { grow: 1 }
+
+            Row {
+                height: 30; valign: "center"
+                appear: motion ? "wipe" : ""; appearDelay: 120; appearDuration: 720
+                Rectangle { width: 52; height: 2; color: signal }
+                Rectangle {
+                    height: 30; horizontalPadding: 16; color: signal; shape: "square, square, cut 12, square"
+                    halign: "center"; valign: "center"
+                    Row {
+                        spacing: 12; valign: "center"
+                        Text { text: caps(qsTr("Loading")); font.family: fontWide; font.width: "expanded"; font.weight: "black"; font.size: 12; font.letterSpacing: 3; color: onSignal }
+                        Rectangle { width: 1; height: 12; color: alpha(onSignal, 0.35) }
+                        Text { text: count; font.family: fontNum; font.size: 13; font.weight: "bold"; font.tabular: true; color: onSignal }
+                    }
+                }
+                Stack {
+                    grow: 1; height: 30
+                    Column { Item { grow: 1 } Rectangle { height: 1; color: alpha(ink, 0.18) } Item { grow: 1 } }
+                    Column {
+                        Item { grow: 1 }
+                        Row {
+                            height: 4
+                            Rectangle { grow: fill; height: 4; color: signal; animate: 50; easing: "standard" }
+                            Item { grow: 1 - fill }
+                        }
+                        Item { grow: 1 }
+                    }
+                }
+                Item { width: 18 }
+                Stack {
+                    width: 22; height: 22
+                    Path { d: "M0.5 0.02 L0.98 0.5 L0.5 0.98 L0.02 0.5 Z"; stroke: signal; strokeWidth: 1.5; dash: [5, 4]; dashSpeed: motion ? 26 : 0; join: "miter" }
+                    Path { d: "M0.5 0.3 L0.7 0.5 L0.5 0.7 L0.3 0.5 Z"; fill: signal; appear: motion ? "flicker" : ""; appearDelay: 700 }
+                }
+                Item { width: 52 }
+            }
+
+            Column {
+                padding: 52; spacing: 0
+                Row {
+                    spacing: 24; valign: "top"
+                    Grid {
+                        width: 360; columns: 1; spacing: 3
+                        model: log
+                        delegate: Row {
+                            spacing: 8; valign: "center"
+                            Text { text: ">"; font.family: fontMono; font.mono: true; font.size: 9; color: index === log.length - 1 ? primary : faint }
+                            Text { text: caps(modelData); font.family: fontMono; font.mono: true; font.size: 9; font.letterSpacing: 0.8; color: index === log.length - 1 ? ink : caption }
+                            Rectangle { grow: 1; height: 1; color: alpha(ink, 0.1) }
+                            Text { text: "OK"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 9; color: green }
+                        }
+                    }
+                    Item { grow: 1 }
+                    Column {
+                        spacing: 2
+                        Row {
+                            spacing: 4; valign: "bottom"
+                            Item { grow: 1 }
+                            Text { text: count; font.family: fontNum; font.size: 46; font.weight: "medium"; font.tabular: true; color: ink }
+                            Text { text: "%"; font.family: fontNum; font.size: 16; color: caption }
+                        }
+                        Row {
+                            spacing: 6
+                            Item { grow: 1 }
+                            Text { text: "SYNC"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 8.5; font.letterSpacing: 0.6; color: primary }
+                            Text { text: "//"; font.family: fontMono; font.mono: true; font.size: 8.5; color: faint }
+                            Text { text: caps(loading.ready ? qsTr("Ready") : qsTr("Docks")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 1.2; color: caption; colorAnimation: 200 }
+                        }
+                    }
+                }
+            }
+            Item { height: 40 }
+            Column {
+                padding: 52; spacing: 0
+                Row {
+                    spacing: 10; valign: "center"
+                    appear: motion ? "fade" : ""; appearDelay: 500
+                    Rectangle {
+                        height: 18; horizontalPadding: 7; color: "transparent"; border.width: 1; border.color: lineHot; shape: cutPlate
+                        halign: "center"; valign: "center"
+                        Text { text: caps(qsTr("Tip")); font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 8; font.letterSpacing: 1; color: inkDim }
+                    }
+                    Text { text: caps(advice[0]); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 1.4; color: ink }
+                    Keys { visible: !!advice[1]; key: advice[1]; small: true }
+                    Text { text: advice[2]; font.family: fontUi; font.size: 11.5; color: inkDim }
+                }
+            }
+        }
+    }
+}

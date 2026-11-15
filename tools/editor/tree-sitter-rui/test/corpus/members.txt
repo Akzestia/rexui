@@ -1,0 +1,294 @@
+================================================================================
+Elements, bindings, ids, separators
+================================================================================
+
+import QtQuick 2.0
+
+Dock {
+    side: "right"; width: 300
+    id: root
+    font.size: 14
+    Text { text: qsTr("hi") }, Item {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (import_line
+    (import_source))
+  (element
+    (type_identifier)
+    (element_body
+      (binding
+        (property_identifier)
+        (expression_statement
+          (string
+            (string_fragment))))
+      (binding
+        (property_identifier)
+        (expression_statement
+          (number)))
+      (id_binding
+        (identifier))
+      (binding
+        (qualified_name
+          (identifier)
+          (property_identifier))
+        (expression_statement
+          (number)))
+      (element
+        (type_identifier)
+        (element_body
+          (binding
+            (property_identifier)
+            (expression_statement
+              (call_expression
+                (identifier)
+                (arguments
+                  (string
+                    (string_fragment))))))))
+      (element
+        (type_identifier)
+        (element_body)))))
+
+================================================================================
+Properties and functions
+================================================================================
+
+Dock {
+    property var items: ({ a: 1 })
+    readonly property int n
+    property done
+    function go(a, b) { return a + b }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (element
+    (type_identifier)
+    (element_body
+      (property_declaration
+        (type_identifier)
+        (property_identifier)
+        (expression_statement
+          (parenthesized_expression
+            (object
+              (pair
+                (property_identifier)
+                (number))))))
+      (property_declaration
+        (type_identifier)
+        (property_identifier))
+      (property_declaration
+        (property_identifier))
+      (function_declaration
+        (identifier)
+        (formal_parameters
+          (identifier)
+          (identifier))
+        (statement_block
+          (return_statement
+            (binary_expression
+              (identifier)
+              (identifier))))))))
+
+================================================================================
+A value goes on when the next line starts with an operator
+================================================================================
+
+Dock {
+    property bool light: scheme === "light"
+        || foo
+    width: a
+    height: b
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (element
+    (type_identifier)
+    (element_body
+      (property_declaration
+        (type_identifier)
+        (property_identifier)
+        (expression_statement
+          (binary_expression
+            (binary_expression
+              (identifier)
+              (string
+                (string_fragment)))
+            (identifier))))
+      (binding
+        (property_identifier)
+        (expression_statement
+          (identifier)))
+      (binding
+        (property_identifier)
+        (expression_statement
+          (identifier))))))
+
+================================================================================
+Handlers, blocks and delegates
+================================================================================
+
+Dock {
+    onClicked: if (a) b()
+    onTextChanged: count++
+    Component.onCompleted: { console.log("x") }
+    width: { if (a) return 1; return 2 }
+    List { delegate: Row { Text { text: modelData } } }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (element
+    (type_identifier)
+    (element_body
+      (binding
+        (property_identifier)
+        (if_statement
+          (parenthesized_expression
+            (identifier))
+          (expression_statement
+            (call_expression
+              (identifier)
+              (arguments)))))
+      (binding
+        (property_identifier)
+        (expression_statement
+          (update_expression
+            (identifier))))
+      (binding
+        (qualified_name
+          (identifier)
+          (property_identifier))
+        (statement_block
+          (expression_statement
+            (call_expression
+              (member_expression
+                (identifier)
+                (property_identifier))
+              (arguments
+                (string
+                  (string_fragment)))))))
+      (binding
+        (property_identifier)
+        (statement_block
+          (if_statement
+            (parenthesized_expression
+              (identifier))
+            (return_statement
+              (number)))
+          (return_statement
+            (number))))
+      (element
+        (type_identifier)
+        (element_body
+          (binding
+            (property_identifier)
+            (element
+              (type_identifier)
+              (element_body
+                (element
+                  (type_identifier)
+                  (element_body
+                    (binding
+                      (property_identifier)
+                      (expression_statement
+                        (identifier)))))))))))))
+
+================================================================================
+use, a qualified element, Slot
+================================================================================
+
+use "components"
+use "~/kit" as Kit
+
+Dock {
+    Column {
+        Kit.Card { title: a.b; Slot { } }
+        List { delegate: Kit.Row { } }
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (use_declaration
+    (string
+      (string_fragment)))
+  (use_declaration
+    (string
+      (string_fragment))
+    (namespace_identifier))
+  (element
+    (type_identifier)
+    (element_body
+      (element
+        (type_identifier)
+        (element_body
+          (element
+            (qualified_type
+              (namespace_identifier)
+              (type_identifier))
+            (element_body
+              (binding
+                (property_identifier)
+                (expression_statement
+                  (member_expression
+                    (identifier)
+                    (property_identifier))))
+              (element
+                (type_identifier)
+                (element_body))))
+          (element
+            (type_identifier)
+            (element_body
+              (binding
+                (property_identifier)
+                (element
+                  (qualified_type
+                    (namespace_identifier)
+                    (type_identifier))
+                  (element_body))))))))))
+
+================================================================================
+Signals, and signal as a property's name
+================================================================================
+
+Column {
+    signal closed
+    signal activated(int n, s)
+    signal: 1
+    onActivated: closed()
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (element
+    type: (type_identifier)
+    body: (element_body
+      (signal_declaration
+        name: (property_identifier))
+      (signal_declaration
+        name: (property_identifier)
+        parameters: (signal_parameters
+          (signal_parameter
+            type: (type_identifier)
+            name: (identifier))
+          (signal_parameter
+            name: (identifier))))
+      (binding
+        name: (property_identifier)
+        value: (expression_statement
+          (number)))
+      (binding
+        name: (property_identifier)
+        value: (expression_statement
+          (call_expression
+            function: (identifier)
+            arguments: (arguments)))))))

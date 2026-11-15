@@ -1,0 +1,17 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 480
+    group: "side"; title: "X"; iconColor: "#000000"
+    icon: web.favicon || "xmark"
+    key: "cmd+shift+x"
+
+    Rectangle {
+        grow: 1; radius: 10
+        WebView {
+            id: web
+            cookies: "zen"
+            url: "https://x.com/home"
+        }
+    }
+}

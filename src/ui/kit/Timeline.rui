@@ -1,0 +1,31 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Item {
+    id: tl
+    width: 0; height: 0; visible: false
+    property var steps: []
+    property bool running: false
+    property bool loop: false
+    property int next: 0
+    property real at: 0
+    signal finished
+    function arm() {
+        if (!tl.running || tl.next >= tl.steps.length) return
+        tick.interval = Math.max(1, tl.steps[tl.next][0] - tl.at)
+        tick.restart()
+    }
+    onRunningChanged: { tl.next = 0; tl.at = 0; if (tl.running) arm(); else tick.stop() }
+    Timer {
+        id: tick
+        running: false; repeat: false
+        onTriggered: {
+            const s = tl.steps[tl.next]
+            tl.at = s[0]
+            tl.next = tl.next + 1
+            s[1]()
+            if (tl.next < tl.steps.length) tl.arm()
+            else if (tl.loop) { tl.next = 0; tl.at = 0; tl.arm() }
+            else tl.finished()
+        }
+    }
+}

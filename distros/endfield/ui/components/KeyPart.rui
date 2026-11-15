@@ -1,0 +1,30 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Stack {
+    id: kp
+    property var part: null
+    property bool small: false
+    property var fg: "#ffffff"
+    property var fill: "transparent"
+    property var edge: "#ffffff"
+    property string num: "Space Grotesk"
+    property bool square: !!part && (!!part.sym || String(part.text).length === 1)
+    visible: !!part
+    height: small ? 17 : 20
+    Rectangle {
+        visible: kp.square
+        width: kp.small ? 17 : 20
+        color: kp.fill; colorAnimation: 120; border.width: 1; border.color: kp.edge
+        Row { halign: "center"; valign: "center"
+            Icon { visible: !!kp.part && !!kp.part.sym; name: kp.part && kp.part.sym || ""; font.size: kp.small ? 8.5 : 10; font.bold: true; color: kp.fg }
+            Text { visible: !!kp.part && !kp.part.sym; text: kp.part && kp.part.text || ""; font.family: kp.num; font.size: kp.small ? 10 : 11.5; font.weight: "bold"; color: kp.fg } }
+    }
+    Rectangle {
+        visible: !!kp.part && !kp.square
+        horizontalPadding: 6
+        color: kp.fill; colorAnimation: 120; border.width: 1; border.color: kp.edge
+        Row { valign: "center"
+            Text { text: kp.part && kp.part.text || ""; font.family: kp.num; font.size: kp.small ? 8 : 9; font.weight: "bold"; font.letterSpacing: 0.8; color: kp.fg } }
+    }
+    Column { Item { grow: 1 }; Rectangle { height: 2; color: kp.edge } }
+}

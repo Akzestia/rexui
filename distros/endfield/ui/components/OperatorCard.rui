@@ -1,0 +1,57 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Stack {
+    id: oc
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? "#d9d9d9" : "#fffa00"
+    property var primary: accentName === "wuling" ? "#14d0d0" : signal
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property var op: ({})
+    property bool chosen: false
+    signal clicked
+    property string shaders: "~/.config/rex/distros/endfield/ui/shaders/"
+    property bool hot: hit.hovered
+    function elementIcon(e) { return ({ Heat: "flame.fill", Electric: "bolt.fill", Cryo: "snowflake", Nature: "leaf.fill", Physical: "circle.hexagongrid.fill" })[e] || "circle.fill"; }
+    function elementTint(e) { return ({ Heat: "#ff5a2a", Electric: "#e9b80c", Cryo: "#3fb6e8", Nature: "#6fb83c", Physical: "#8f9298" })[e] || "#8f9298"; }
+    function rareTint(n) { return n >= 6 ? "#fc6c00" : n === 5 ? "#fcba00" : n === 4 ? "#904ef6" : "#24bafc"; }
+    Rectangle { shape: "square, cut 8, square, cut 8"; color: oc.hot || oc.chosen ? "#26282d" : "#1e2024"; colorAnimation: 160
+        border.width: oc.chosen ? 2 : 1; border.color: oc.chosen || oc.hot ? signal : "#33363c" }
+    Column {
+        padding: oc.chosen ? 2 : 1
+        Stack {
+            Shader { source: oc.shaders + "card.metal"; running: motion && oc.hot; fps: 30; params: [0, 0.8, 1.8, oc.hot ? 1 : 0]; colors: [oc.rareTint(oc.op.rarity), "#0a0a0b", "#ffffff"] }
+            Image { source: oc.op.round || oc.op.avatar || ""; fit: "cover" }
+            Shader { visible: motion && oc.hot; source: oc.shaders + "card.metal"; running: motion && oc.hot; fps: 60; params: [1, 0, 1.8, 1]; colors: [oc.rareTint(oc.op.rarity), "#0a0a0b", "#80ffffff"] }
+            Column {
+                Row { padding: 4
+                    Rectangle { width: 17; height: 17; color: oc.elementTint(oc.op.element); halign: "center"; valign: "center"; tip: oc.op.element || ""
+                        Icon { name: oc.elementIcon(oc.op.element); font.size: 9.5; color: "#ffffff" } } }
+                Item { grow: 1 }
+                Rectangle { color: "#cc0f0f10"; horizontalPadding: 6; verticalPadding: 2
+                    Row { spacing: 4; valign: "bottom"
+                        Text { text: "LV"; font.family: "Saira"; font.width: "expanded"; font.weight: "semibold"; font.size: 8; color: "#a8abb2" }
+                        Text { text: two(oc.op.level || 0); font.family: "Space Grotesk"; font.size: 18; font.tabular: true; color: "#f0f0f2" }
+                        Item { grow: 1 }
+                        Text { text: "E" + (oc.op.promotion || 0); font.family: "Iosevka"; font.mono: true; font.size: 10; font.weight: "bold"; color: oc.op.promotion ? primary : "#a8abb2" } } }
+            }
+        }
+        Rectangle { height: 3; color: oc.rareTint(oc.op.rarity) }
+        Column { padding: 7; spacing: 4
+            Text { text: String(oc.op.name || "").toUpperCase(); font.family: "Saira"; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 0.3; color: oc.hot || oc.chosen ? primary : "#f0f0f2"; colorAnimation: 160; maxLines: 1 }
+            Row { spacing: 4; valign: "center"
+                Text { grow: 1; text: String(oc.op.class || "").toUpperCase(); font.family: "Iosevka"; font.mono: true; font.size: 8.5; font.letterSpacing: 0.3; color: "#a8abb2"; maxLines: 1 }
+                Potential { value: oc.op.potential || 0; size: 11; tint: "#e4e4e6"; line: "#7f828a"; lineWidth: 1 } }
+            Stars { count: oc.op.rarity || 0; size: 13; tint: "#e4e4e6" } }
+    }
+    Column {
+        visible: oc.hot; padding: -3; appear: motion ? "flicker" : ""; appearDuration: 240
+        Row { Path { width: 9; height: 9; d: "M0 1 V0 H1"; stroke: signal; strokeWidth: 2; cap: "square" }; Item { grow: 1 }
+            Path { width: 9; height: 9; d: "M0 0 H1 V1"; stroke: signal; strokeWidth: 2; cap: "square" } }
+        Item { grow: 1 }
+        Row { Path { width: 9; height: 9; d: "M0 0 V1 H1"; stroke: signal; strokeWidth: 2; cap: "square" }; Item { grow: 1 }
+            Path { width: 9; height: 9; d: "M0 1 H1 V0"; stroke: signal; strokeWidth: 2; cap: "square" } }
+    }
+    Column { visible: oc.chosen; padding: 6; Row { Item { grow: 1 }; Path { width: 9; height: 9; d: "M0.5 0.06 L0.94 0.5 L0.5 0.94 L0.06 0.5 Z"; fill: signal; stroke: signal; strokeWidth: 1.5 } } }
+    Button { id: hit; stateLayer: false; tip: oc.op.weapon ? oc.op.weapon.name + "  ·  LV " + oc.op.weapon.level : ""; onClicked: oc.clicked() }
+}

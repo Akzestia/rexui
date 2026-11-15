@@ -1,0 +1,27 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Item {
+    id: dlg
+    width: 0; height: 0
+    property bool open: false
+    property string title: ""
+    property string acceptText: qsTr("OK")
+    property string rejectText: qsTr("Cancel")
+    property var fill: theme.background
+    property real boxWidth: 380
+    property real boxHeight: 200
+    signal accepted
+    signal rejected
+    Drawer {
+        open: dlg.open; placement: "center"; width: dlg.boxWidth; height: dlg.boxHeight; rounding: 14; animation: 180
+        resizable: false; movable: false; color: dlg.fill; padding: 18; spacing: 12
+        onClosed: if (dlg.open) dlg.rejected()
+        Text { visible: dlg.title.length > 0; text: dlg.title; font.size: 15; font.weight: "semibold" }
+        Column { grow: 1; spacing: 8; Slot { } }
+        Row {
+            spacing: 8; halign: "right"
+            Button { text: dlg.rejectText; style: "bordered"; onClicked: dlg.rejected() }
+            Button { text: dlg.acceptText; style: "bordered"; onClicked: dlg.accepted() }
+        }
+    }
+}

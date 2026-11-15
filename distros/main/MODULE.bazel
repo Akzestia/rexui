@@ -1,0 +1,27 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: GPL-3.0-only
+module(name = "rexui_main")
+
+bazel_dep(name = "rexui", version = "1.0.0")
+local_path_override(module_name = "rexui", path = "../..")
+
+bazel_dep(name = "apple_support", version = "2.11.0")
+bazel_dep(name = "rules_cc", version = "0.2.27")
+bazel_dep(name = "rules_shell", version = "0.8.0")
+bazel_dep(name = "rules_swift", version = "4.2.2")
+
+bazel_dep(name = "rules_rust", version = "0.75.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(edition = "2024", versions = ["1.99.1"])
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "chat_crates",
+    cargo_lockfile = "//backends/chat:Cargo.lock",
+    manifests = ["//backends/chat:Cargo.toml"],
+)
+use_repo(crate, "chat_crates")

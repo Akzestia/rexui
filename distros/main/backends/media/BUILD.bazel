@@ -1,0 +1,27 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: GPL-3.0-only
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+objc_library(
+    name = "media",
+    srcs = ["media.m"],
+    copts = ["-x", "objective-c++", "-std=c++20", "-fobjc-arc"],
+    sdk_dylibs = ["liblzma"],
+    sdk_frameworks = ["AppKit", "AudioToolbox", "CoreAudio", "Foundation"],
+    deps = ["@rexui//backends/sdk/c:backend", "@rexui//src/web:profile"],
+    alwayslink = True,
+)
+
+cc_binary(
+    name = "librexui-media.dylib",
+    linkshared = True,
+    deps = [":media"],
+)
+
+sh_binary(
+    name = "rexui-media",
+    srcs = ["rexui-media.sh"],
+    data = [":librexui-media.dylib"],
+)

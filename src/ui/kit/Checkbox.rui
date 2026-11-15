@@ -1,0 +1,22 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Stack {
+    id: box
+    property string text: ""
+    property bool checked: false
+    property bool enabled: true
+    property var tint: "accent"
+    signal toggled(bool checked)
+    opacity: enabled ? 1 : 0.4
+    Row {
+        spacing: 8; valign: "center"
+        Rectangle {
+            width: 16; height: 16; radius: 4; color: box.checked ? box.tint : "transparent"; colorAnimation: 100
+            border.width: box.checked ? 0 : 1; border.color: theme.dark ? "#66ffffff" : "#66000000"
+            halign: "center"; valign: "center"
+            Icon { visible: box.checked; name: "checkmark"; color: "#ffffff"; font.size: 10; font.bold: true }
+        }
+        Text { visible: box.text.length > 0; text: box.text; shrink: 1 }
+    }
+    Button { stateLayer: false; enabled: box.enabled; cursor: "pointer"; onClicked: { box.checked = !box.checked; box.toggled(box.checked) } }
+}

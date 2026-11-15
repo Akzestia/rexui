@@ -1,0 +1,52 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    side: "right"; width: 520
+    padding: 10; spacing: 8
+    color: surface
+    group: "side"; title: qsTr("Claude"); iconColor: clay
+    icon: web.favicon || "staroflife.fill"
+    key: "cmd+j"; groupKey: "cmd+shift+s"
+    bar: "float"; barKey: "cmd+s"; barColor: surface
+    transition: "melt"; iconFly: true
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var hairline: light ? "#1f141413" : "#1cfaf9f5"
+    property var clay: "#d97757"
+    property bool motion: conf.values["clay-motion"] !== "false"
+
+    Row {
+        spacing: 10; horizontalPadding: 6; verticalPadding: 2
+        Stack { width: 18; height: 18; Shader { source: "shaders/spark.metal"; colors: [clay]; params: [12, web.loading ? 1 : 0, 1, 1]; running: motion; fps: 30 } }
+        Text { text: qsTr("Claude"); font.family: "serif"; font.size: 17; color: ink }
+        Item { grow: 1 }
+        Button { icon: "chevron.left"; font.size: 12; color: inkDim; enabled: web.canGoBack; opacity: web.canGoBack ? 1 : 0.3; onClicked: web.back() }
+        Button { icon: web.loading ? "xmark" : "arrow.clockwise"; font.size: 12; color: inkDim; onClicked: web.loading ? web.stop() : web.reload() }
+        Stack {
+            Rectangle { radius: 13; height: 26; horizontalPadding: 12; border.width: 1; border.color: hairline
+                Row { spacing: 6; Icon { name: "square.and.pencil"; font.size: 11; color: clay }; Text { text: qsTr("New chat"); font.size: 12; color: ink } }
+            }
+            Button { stateRadius: 13; onClicked: web.load("https://claude.ai/new") }
+        }
+    }
+
+    Rectangle {
+        grow: 1; radius: 12; color: container
+        border.width: 1; border.color: hairline
+        WebView {
+            id: web
+            url: "https://claude.ai"
+            cookies: "zen"
+            adblock: false
+            suspend: 900
+        }
+    }
+}

@@ -1,0 +1,40 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Column {
+    id: drop
+    property var items: []
+    property int current: 0
+    property bool opened: false
+    property bool enabled: true
+    property var fill: theme.dark ? "#1fffffff" : "#14000000"
+    signal picked(int index, value)
+    function label(it) { return it && it.label !== undefined ? it.label : String(it === undefined ? "" : it) }
+    function value(it) { return it && it.value !== undefined ? it.value : it }
+    spacing: 4
+    opacity: enabled ? 1 : 0.4
+    Stack {
+        height: 28
+        Rectangle { radius: 6; color: drop.fill }
+        Row {
+            horizontalPadding: 10; spacing: 6; valign: "center"
+            Text { grow: 1; text: drop.label(drop.items[drop.current]) }
+            Icon { name: drop.opened ? "chevron.up" : "chevron.down"; font.size: 10 }
+        }
+        Button { stateRadius: 6; enabled: drop.enabled; cursor: "pointer"; onClicked: drop.opened = !drop.opened }
+    }
+    Rectangle {
+        radius: 6; color: drop.fill; padding: 4; clips: true
+        expanded: drop.opened; collapse: true; animate: 160; easing: "standard"
+        Column {
+            Stack {
+                model: drop.items
+                delegate: Stack {
+                    height: 26
+                    Rectangle { radius: 4; color: index === drop.current ? (theme.dark ? "#1fffffff" : "#14000000") : "transparent" }
+                    Row { horizontalPadding: 6; Text { text: drop.label(modelData) } }
+                    Button { stateRadius: 4; cursor: "pointer"; onClicked: { drop.current = index; drop.opened = false; drop.picked(index, drop.value(modelData)) } }
+                }
+            }
+        }
+    }
+}

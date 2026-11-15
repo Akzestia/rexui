@@ -1,0 +1,154 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Column {
+    id: ms
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property var state: ({})
+    property var act: null
+    property bool compact: false
+    property string kind: "daily"
+    property bool showDone: false
+    property int limit: 0
+    property string draft: ""
+    property string shaders: "shaders/"
+    spacing: 12
+    function send(m) { if (ms.act) ms.act(m); }
+    property var all: state.missions || []
+    property var mine: all.filter((m) => m.kind === kind)
+    property var open: mine.filter((m) => !m.done).sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0))
+    property var finished: mine.filter((m) => m.done)
+    property var rows: { const r = showDone && !compact ? open.concat(finished) : open; return limit > 0 ? r.slice(0, limit) : r; }
+    function count(k) { return all.filter((m) => m.kind === k && !m.done).length; }
+
+    Row {
+        spacing: 2
+        Grid {
+            columns: 3; spacing: 2; width: 3 * 92
+            model: [{ k: "daily", t: qsTr("Daily") }, { k: "weekly", t: qsTr("Weekly") }, { k: "once", t: qsTr("Once") }]
+            delegate: Stack {
+                width: 92; height: 26
+                Rectangle {
+                    halign: "center"; valign: "center"; color: ms.kind === modelData.k ? signal : containerHigh; colorAnimation: 140
+                    Row { spacing: 5
+                        Text { text: caps(modelData.t); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 9; font.letterSpacing: 1.1; color: ms.kind === modelData.k ? onSignal : inkDim; colorAnimation: 140 }
+                        Text { visible: ms.count(modelData.k) > 0; text: String(ms.count(modelData.k)); font.family: fontNum; font.size: 10; font.tabular: true; color: ms.kind === modelData.k ? onSignal : caption } }
+                }
+                Button { stateLayer: false; onClicked: ms.kind = modelData.k }
+            }
+        }
+        Item { grow: 1 }
+        Row {
+            spacing: 6; visible: !ms.compact
+            Text { text: caps(qsTr("Streak")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.5; color: caption }
+            Pips { count: 7; filled: Math.min(7, ms.state.streak || 0); size: 7 }
+            Text { text: String(ms.state.streak || 0); font.family: fontNum; font.size: 12; font.tabular: true; color: ink }
+        }
+    }
+
+    Column {
+        spacing: 0
+        Grid {
+            columns: 1; spacing: 0
+            model: ms.rows
+            delegate: Stack {
+                property bool hot: rowHit.hovered || dropHit.hovered
+                Rectangle { color: hot ? containerHigh : "transparent"; colorAnimation: 120 }
+                Row { visible: modelData.done
+                    Rectangle { grow: 1; height: 34; color: alpha(signal, light ? 0.30 : 0.16); appear: motion ? "wipe" : ""; appearDuration: 520 } }
+                Column {
+                    Rectangle { height: 1; color: hairline; visible: index > 0 }
+                    Row {
+                        height: 33; spacing: 10; horizontalPadding: 6
+                        Text { text: modelData.done ? "◆" : "◇"; font.size: 12; color: modelData.done ? primary : modelData.urgent ? orange : caption }
+                        Text { visible: modelData.urgent && !modelData.done; text: "!!!"; font.family: fontMono; font.mono: true; font.size: 10; font.weight: "bold"; color: orange }
+                        Text { grow: 1; text: modelData.text; font.family: fontUi; font.size: 13; color: modelData.done ? caption : ink; maxLines: 1 }
+                        Rectangle {
+                            visible: modelData.done; horizontalPadding: 5; verticalPadding: 1; border.width: 1; border.color: primary
+                            appear: motion ? "flicker" : ""; appearDelay: 420
+                            Text { text: qsTr("DONE"); font.family: fontWide; font.width: "expanded"; font.weight: "bold"; font.size: 8.5; font.letterSpacing: 1; color: primary }
+                        }
+                        Item { width: 18 }
+                    }
+                }
+                Button { id: rowHit; stateLayer: false; tip: modelData.done ? qsTr("Not done") : qsTr("Done"); onClicked: ms.send(modelData.done ? { undo: { id: modelData.id } } : { done: { id: modelData.id } }) }
+                Row {
+                    halign: "right"; horizontalPadding: 6
+                    Button { id: dropHit; icon: "xmark"; font.size: 9; font.bold: true; enabled: hot && !ms.compact; opacity: hot && !ms.compact ? 1 : 0; animate: 140
+                        color: hovered ? red : caption; tip: qsTr("Remove"); onClicked: ms.send({ remove: { id: modelData.id } }) }
+                }
+            }
+        }
+        Text {
+            visible: !ms.mine.length
+            text: ms.kind === "daily" ? qsTr("No daily missions yet: add one, and it comes back each day.") : ms.kind === "weekly" ? qsTr("No weekly missions: they come back each Monday.") : qsTr("Nothing to do once. Enjoy it.")
+            font.family: fontUi; font.size: 12; color: caption; wrap: true
+        }
+        Stack {
+            visible: ms.finished.length > 0 && !ms.compact
+            Row { spacing: 6; verticalPadding: 8; horizontalPadding: 6
+                Text { text: ms.showDone ? "▼" : "▶"; font.size: 7; color: caption }
+                Text { text: qsTr("%1 done", ms.finished.length); font.family: fontMono; font.mono: true; font.size: 10; font.letterSpacing: 0.4; color: caption } }
+            Button { stateLayer: false; onClicked: ms.showDone = !ms.showDone }
+        }
+        Text { visible: ms.compact && ms.finished.length > 0; text: "◆ " + qsTr("%1 done", ms.finished.length); font.family: fontMono; font.mono: true; font.size: 10; color: caption }
+    }
+
+    Row {
+        visible: !ms.compact; spacing: 10
+        Rectangle {
+            grow: 1; height: 32; shape: "cut 8, square, square, square"; border.width: 1; border.color: field.text ? primary : hairline; color: container; horizontalPadding: 10; valign: "center"
+            TextField { id: field; placeholder: qsTr("A new mission"); font.family: fontUi; font.size: 13; color: ink
+                onTextChanged: ms.draft = text
+                onAccepted: { if (text.trim()) { ms.send({ add: { text: text, kind: ms.kind, urgent: false } }); text = ""; } } }
+        }
+        Pill {
+            text: qsTr("Add"); icon: "plus"; kind: "primary"; small: true; shaders: ms.shaders; enabled: !!ms.draft.trim()
+            onClicked: if (field.text.trim()) { ms.send({ add: { text: field.text, kind: ms.kind, urgent: false } }); field.text = ""; }
+        }
+    }
+}

@@ -1,0 +1,10 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: GPL-3.0-only
+load("@rules_swift//swift:swift_binary.bzl", "swift_binary")
+
+swift_binary(
+    name = "rexui-visualiser",
+    srcs = ["main.swift", "@rexui//backends/sdk/swift:RexuiBackend.swift"],
+    copts = ["-import-objc-header", "$(location @rexui//backends/include:rexui_frames.h)"],
+    swiftc_inputs = ["@rexui//backends/include:rexui_frames.h"],
+)

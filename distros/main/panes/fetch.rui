@@ -1,0 +1,101 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    title: "Fetch"; icon: "apple.logo"
+    padding: 32; halign: "center"; valign: "center"
+    color: surface
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var colors: prefs.state.colors
+    property bool light: colors ? !!colors.light : !theme.dark
+    property var rose: (light ? "fff8f8 faeaed f4e4e7 efdfe2 8b4a62 ffffff ffd9e3 6f334a 74565f ffffff ffd9e3 5a3f48 7d5636 4e6355 22191c 514347 837377 d5c2c6"
+                              : "191114 261d20 31282a 3c3235 ffb0ca 541d34 6f334a ffd9e3 e2bdc7 422932 5a3f48 ffd9e3 f0bc95 b5ccba efdfe2 d5c2c6 9e8c91 514347").split(" ").map((c) => "#" + c)
+    property var pal: colors ? ["surface", "container", "containerHigh", "containerHighest", "primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "success", "ink", "inkDim", "outline", "outlineVariant"].map((k) => colors[k]) : rose
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHighest: pal[3]
+    property var primary: pal[4]
+    property var primaryContainer: pal[6]
+    property var secondary: pal[8]
+    property var secondaryContainer: pal[10]
+    property var tertiary: pal[12]
+    property var success: pal[13]
+    property var ink: pal[14]
+    property var inkDim: pal[15]
+    property var outline: pal[16]
+
+    Process { id: sys; command: "rexui-sys" }
+    property var s: sys.state
+    property var info: ({})
+    Process {
+        restart: false
+        command: "echo model=$(system_profiler SPHardwareDataType | grep 'Model Name' | cut -d: -f2);" +
+                 "echo chip=$(sysctl -n machdep.cpu.brand_string);" +
+                 "echo shell=$(basename $(dscl . -read ~ UserShell | cut -d' ' -f2));" +
+                 "echo brew=$(ls /opt/homebrew/Cellar 2>/dev/null | wc -l | tr -d ' ')"
+        onMessage: {
+            const t = String(message), k = t.indexOf("=");
+            if (k > 0) info = Object.assign({}, info, { [t.slice(0, k)]: t.slice(k + 1).trim() });
+        }
+    }
+
+    function gb(b) { return (b / 1e9).toFixed(1) + " GB"; }
+    function since(sec) {
+        const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+        return [d ? d + "d" : "", h ? h + "h" : "", m + "m"].filter((x) => x).join(" ");
+    }
+    property var facts: [
+        ["OS", s.os || "macOS"],
+        ["Host", info.model || "…"],
+        ["Chip", info.chip ? info.chip + (s.cores ? " (" + s.cores + ")" : "") : "…"],
+        ["Uptime", s.uptime ? since(s.uptime) : "…"],
+        ["Packages", info.brew ? info.brew + " (brew)" : "…"],
+        ["Shell", info.shell || "…"],
+        ["Terminal", "Rex UI"],
+        ["CPU", s.cpu === undefined ? "…" : Math.round(s.cpu * 100) + "%  ·  load " + (s.load || 0).toFixed(2)],
+        ["Memory", s.memTotal ? gb(s.memUsed) + " / " + gb(s.memTotal) : "…"],
+        ["Disk", s.diskTotal ? gb(s.diskUsed) + " / " + gb(s.diskTotal) : "…"],
+        ["Battery", s.battery >= 0 ? Math.round(s.battery * 100) + "%" + (s.charging ? "  (charging)" : "") : "none"]
+    ]
+
+    Row {
+        spacing: 40; valign: "center"
+        Rectangle {
+            width: 180; height: 180; radius: 60; color: primaryContainer; halign: "center"; valign: "center"
+            Icon { name: "apple.logo"; font.size: 92; color: primary }
+        }
+        Column {
+            spacing: 3
+            Row {
+                spacing: 0
+                Text { text: s.user || "…"; font.mono: true; font.bold: true; font.size: 16; color: primary }
+                Text { text: "@"; font.mono: true; font.size: 16; color: ink }
+                Text { text: s.host || "…"; font.mono: true; font.bold: true; font.size: 16; color: primary }
+            }
+            Text { text: "─".repeat(((s.user || "") + "@" + (s.host || "")).length || 12); font.mono: true; font.size: 16; color: outline }
+            Grid {
+                columns: 1; spacing: 3
+                model: facts
+                delegate: Row {
+                    spacing: 4
+                    Text { text: modelData[0] + ":"; font.mono: true; font.bold: true; font.size: 14; color: secondary }
+                    Text { text: modelData[1]; font.mono: true; font.size: 14; color: ink }
+                }
+            }
+            Item { height: 10 }
+            Row {
+                spacing: 6
+                Rectangle { width: 28; height: 16; radius: 5; color: surface; border.width: 1; border.color: outline }
+                Rectangle { width: 28; height: 16; radius: 5; color: container }
+                Rectangle { width: 28; height: 16; radius: 5; color: containerHighest }
+                Rectangle { width: 28; height: 16; radius: 5; color: primaryContainer }
+                Rectangle { width: 28; height: 16; radius: 5; color: secondaryContainer }
+                Rectangle { width: 28; height: 16; radius: 5; color: primary }
+                Rectangle { width: 28; height: 16; radius: 5; color: secondary }
+                Rectangle { width: 28; height: 16; radius: 5; color: tertiary }
+                Rectangle { width: 28; height: 16; radius: 5; color: success }
+                Rectangle { width: 28; height: 16; radius: 5; color: ink }
+            }
+        }
+    }
+}

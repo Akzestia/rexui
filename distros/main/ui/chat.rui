@@ -1,0 +1,324 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 340
+    group: "side"; title: qsTr("Chat"); icon: "bubble.left.and.bubble.right.fill"; iconColor: "#30d158"
+    key: "cmd+j"
+
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property var look: prefs.state
+    property string palette: look.palette || "caelestia"
+    property string scheme: look.scheme || "auto"
+    property bool light: scheme === "light" || (scheme === "auto" && !theme.dark)
+    Palette { id: colours; chosen: palette; lightMode: light }
+    property var pal: colours.pal
+    property var surface: pal.surface
+    property var containerHigh: pal.containerHigh
+    property var containerHighest: pal.containerHighest
+    property var primary: pal.primary
+    property var onPrimary: pal.onPrimary
+    property var primaryContainer: pal.primaryContainer
+    property var onPrimaryContainer: pal.onPrimaryContainer
+    property var secondary: pal.secondary
+    property var tertiary: pal.tertiary
+    property var success: pal.success
+    property var ink: pal.ink
+    property var inkDim: pal.inkDim
+    property var faint: pal.outline
+
+    Process { id: saved; command: ["rexui-prefs", "chat"] }
+    property var kept: saved.state
+    property bool inPane: !!pane.id
+    property var paneOwn: ({})
+    property var me: inPane ? paneOwn : kept
+    property string relay: me.relay || ""
+    property string token: me.token || ""
+    property string you: me.name || ""
+    property bool joined: !!me.joined && relay !== ""
+
+    property var messages: []
+    Process {
+        id: chat
+        command: joined ? ["rexui-chat", relay, you, token] : []
+        onMessage: {
+            const m = message.message || (message.event && { event: message.event, from: message.name, at: Date.now() });
+            if (m) messages = messages.concat([m]).slice(-300);
+        }
+    }
+    property var st: chat.state
+
+    function hasHost(r) {
+        const s = String(r || "").trim(), first = s.split("/")[0];
+        return s.includes("://") || (!s.startsWith("/") && (first.includes(".") || first.includes(":") || first === "localhost"));
+    }
+    function hostOf(r) {
+        const s = String(r || "").split("?")[0].trim();
+        return hasHost(s) ? s.split("://").pop().split("/")[0] : "cdn.moq.pro";
+    }
+    function pathOf(r) {
+        const s = String(r || "").split("?")[0].trim();
+        return (hasHost(s) ? s.split("://").pop().split("/").slice(1) : s.split("/")).filter((p) => p).join("/");
+    }
+    property string room: st.room || pathOf(relay) || "chat"
+    property string roomTag: room.split("/").pop()
+    property bool can: relayField.text.trim() !== ""
+    function join() {
+        if (!can) return;
+        messages = [];
+        const v = { relay: relayField.text.trim(), token: tokenField.text.trim(), name: nameField.text.trim(), joined: true };
+        if (!inPane) return saved.send({ set: v });
+        if (!v.name) v.name = "guest-" + (100 + Date.now() % 900);
+        paneOwn = v;
+    }
+    function leave() {
+        if (inPane) paneOwn = Object.assign({}, paneOwn, { joined: false });
+        else saved.send({ set: { joined: false } });
+    }
+    function send() {
+        if (field.text.trim()) chat.send({ send: field.text });
+        field.text = "";
+    }
+
+    function clock(ms) {
+        const d = new Date(ms || 0);
+        return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    }
+    function tint(who) {
+        const colours = [primary, tertiary, secondary, success];
+        let h = 0;
+        for (const c of who || "") h = (h * 31 + c.charCodeAt(0)) >>> 0;
+        return colours[h % colours.length];
+    }
+    function initial(who) { return String(who || "?").slice(0, 1).toUpperCase(); }
+    function opens(i) {
+        const m = messages[i], p = messages[i - 1];
+        return !p || !!p.event || p.from !== m.from || !!p.me !== !!m.me || (m.at || 0) - (p.at || 0) > 120000;
+    }
+    property int here: (st.peers || []).length + 1
+    property string relayHost: st.relay || hostOf(relay)
+    property string statusLine: st.status === "connected" ? qsTr("%1 here", here) + "  ·  " + relayHost :
+                            st.status === "connecting" ? qsTr("Connecting to %1…", relayHost) : qsTr(st.status || "starting")
+
+    Rectangle {
+        grow: 1; radius: 16; color: surface; padding: 14
+
+        Column {
+            visible: !joined
+            spacing: 14
+            Row {
+                Rectangle {
+                    width: 52; height: 52; radius: 18; color: primaryContainer; halign: "center"; valign: "center"
+                    Icon { name: "bubble.left.and.bubble.right.fill"; font.size: 21; color: onPrimaryContainer }
+                }
+            }
+            Column {
+                spacing: 4
+                Text { text: inPane ? qsTr("Join as someone else") : qsTr("Join a room"); font.size: 20; font.weight: "semibold"; color: ink }
+                Text {
+                    wrap: true; font.size: 12; color: inkDim
+                    text: inPane ? qsTr("This pane is a participant of its own, beside the dock: a name of its own, nothing kept, and it leaves as the pane closes.")
+                                 : qsTr("Chat with anyone in a MoQ room. hang.live's rooms work too.")
+                }
+            }
+            Column {
+                spacing: 6
+                Row { horizontalPadding: 4; Text { text: qsTr("Room"); font.size: 11; font.weight: "semibold"; color: inkDim } }
+                Rectangle {
+                    radius: 14; color: containerHigh; horizontalPadding: 12; verticalPadding: 9
+                    Row {
+                        spacing: 9
+                        Icon { name: "number"; font.size: 12; color: primary; width: 16 }
+                        Row {
+                            grow: 1; spacing: -4
+                            Text {
+                                visible: !hasHost(relayField.text)
+                                text: relayField.text.trim().startsWith("/") ? "cdn.moq.pro" : "cdn.moq.pro/"
+                                font.size: 13; color: inkDim
+                            }
+                            TextField { id: relayField; grow: 1; text: relay || (inPane ? kept.relay || "" : ""); placeholder: "project/room"; font.size: 13; color: ink; onAccepted: join() }
+                        }
+                    }
+                }
+            }
+            Column {
+                spacing: 6
+                Row { horizontalPadding: 4; Text { text: qsTr("Token"); font.size: 11; font.weight: "semibold"; color: inkDim } }
+                Rectangle {
+                    radius: 14; color: containerHigh; horizontalPadding: 12; verticalPadding: 9
+                    Row {
+                        spacing: 9
+                        Icon { name: "key.fill"; font.size: 12; color: primary; width: 16 }
+                        TextField {
+                            id: tokenField; grow: 1; text: token || (inPane ? kept.token || "" : ""); secure: true; font.size: 13; color: ink
+                            placeholder: qsTr("Can publish and subscribe")
+                            onAccepted: join()
+                        }
+                    }
+                }
+            }
+            Column {
+                spacing: 6
+                Row { horizontalPadding: 4; Text { text: qsTr("Name"); font.size: 11; font.weight: "semibold"; color: inkDim } }
+                Rectangle {
+                    radius: 14; color: containerHigh; horizontalPadding: 12; verticalPadding: 9
+                    Row {
+                        spacing: 9
+                        Icon { name: "person.fill"; font.size: 12; color: primary; width: 16 }
+                        TextField { id: nameField; grow: 1; text: you; placeholder: inPane ? qsTr("Empty: a guest name") : qsTr("Empty: your login name"); font.size: 13; color: ink; onAccepted: join() }
+                    }
+                }
+            }
+            Stack {
+                Rectangle {
+                    height: 40; radius: 20; color: can ? primary : containerHighest; halign: "center"; valign: "center"; colorAnimation: 160
+                    Row {
+                        spacing: 7
+                        Text { text: qsTr("Join"); font.size: 14; font.weight: "semibold"; color: can ? onPrimary : faint }
+                        Icon { name: "arrow.right"; font.size: 12; color: can ? onPrimary : faint }
+                    }
+                }
+                Button { stateRadius: 20; enabled: can; onClicked: join() }
+            }
+            Text {
+                text: qsTr("A room on cdn.moq.pro is its path (project/room); another relay's, its URL (cdn.moq.dev/anon/room). Leave the token empty for an open relay. All three stay on this Mac.")
+                wrap: true; font.size: 11; color: faint
+            }
+        }
+
+        Column {
+            visible: joined
+            spacing: 12
+            Row {
+                spacing: 10
+                Rectangle {
+                    width: 36; height: 36; radius: 12; color: primaryContainer; halign: "center"; valign: "center"
+                    Icon { name: "number"; font.size: 15; color: onPrimaryContainer }
+                }
+                Column {
+                    grow: 1; spacing: 2
+                    Text { text: room; font.size: 15; font.weight: "semibold"; color: ink }
+                    Row {
+                        spacing: 6
+                        Rectangle {
+                            width: 7; height: 7; radius: 3.5; colorAnimation: 200
+                            color: st.status === "connected" ? success : st.status === "connecting" ? tertiary : faint
+                        }
+                        Text { text: statusLine; font.size: 11; color: inkDim; tip: [st.name || you].concat(st.peers || []).join(", ") }
+                    }
+                }
+                Stack {
+                    Rectangle {
+                        width: 32; height: 32; radius: 16; color: containerHigh; halign: "center"; valign: "center"
+                        Icon { name: "rectangle.portrait.and.arrow.right"; font.size: 12; color: inkDim }
+                    }
+                    Button { stateRadius: 16; tip: qsTr("Leave the room"); onClicked: leave() }
+                }
+            }
+            Rectangle {
+                visible: !!st.error
+                radius: 12; color: containerHigh; horizontalPadding: 12; verticalPadding: 8
+                Row {
+                    spacing: 8
+                    Icon { name: "exclamationmark.triangle.fill"; font.size: 11; color: tertiary }
+                    Text { grow: 1; text: st.error || ""; wrap: true; font.size: 11; color: inkDim }
+                }
+            }
+
+            Stack {
+                grow: 1
+                List {
+                    spacing: 3; follow: true; fade: 0.03
+                    model: messages
+                    delegate: Column {
+                        Item { visible: index > 0 && opens(index); height: 8 }
+                        Row {
+                            visible: !!modelData.event
+                            halign: "center"; spacing: 5; verticalPadding: 2
+                            Icon { name: modelData.event === "joined" ? "arrow.right.circle" : "arrow.left.circle"; font.size: 10; color: faint }
+                            Text { text: qsTr(modelData.event === "joined" ? "%1 joined" : "%1 left", modelData.from); font.size: 11; color: faint }
+                        }
+                        Row {
+                            visible: !modelData.event && !modelData.me
+                            spacing: 8; valign: "top"
+                            Stack {
+                                width: 28; height: 28
+                                Rectangle { visible: opens(index); radius: 14; color: tint(modelData.from); opacity: 0.22 }
+                                Rectangle {
+                                    visible: opens(index); halign: "center"; valign: "center"
+                                    Text { text: initial(modelData.from); font.size: 12; font.weight: "bold"; color: tint(modelData.from) }
+                                }
+                            }
+                            Column {
+                                grow: 1; spacing: 3
+                                Row {
+                                    visible: opens(index); spacing: 6
+                                    Text { text: modelData.from || ""; font.size: 12; font.weight: "semibold"; color: tint(modelData.from) }
+                                    Text { text: clock(modelData.at); font.size: 10; color: faint }
+                                }
+                                Row {
+                                    Rectangle {
+                                        radius: 14; color: containerHigh; horizontalPadding: 11; verticalPadding: 7
+                                        Text { text: modelData.text || ""; wrap: true; selectable: true; font.size: 13; color: ink }
+                                    }
+                                    Item { grow: 1 }
+                                    Item { width: 20 }
+                                }
+                            }
+                        }
+                        Column {
+                            visible: !modelData.event && !!modelData.me
+                            spacing: 3
+                            Row { visible: opens(index); Item { grow: 1 }; Text { text: clock(modelData.at); font.size: 10; color: faint } }
+                            Row {
+                                Item { width: 56 }
+                                Row {
+                                    grow: 1
+                                    Item { grow: 1 }
+                                    Rectangle {
+                                        radius: 14; color: primaryContainer; horizontalPadding: 11; verticalPadding: 7
+                                        Text { text: modelData.text || ""; wrap: true; selectable: true; font.size: 13; color: onPrimaryContainer }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Column {
+                    visible: messages.length === 0
+                    halign: "center"; valign: "center"; spacing: 6
+                    Rectangle {
+                        width: 56; height: 56; radius: 20; color: containerHigh; halign: "center"; valign: "center"
+                        Icon { name: "hand.wave.fill"; font.size: 22; color: primary }
+                    }
+                    Item { height: 2 }
+                    Text { text: qsTr("Say hi to #%1", roomTag); font.size: 15; font.weight: "medium"; color: ink }
+                    Text {
+                        width: 250; align: "center"; wrap: true; font.size: 11; color: inkDim
+                        text: qsTr("Messages stay in the room for ten seconds; this keeps them while it runs.")
+                    }
+                }
+            }
+
+            Rectangle {
+                radius: 22; color: containerHigh; horizontalPadding: 14; verticalPadding: 6
+                Row {
+                    spacing: 8
+                    TextField {
+                        id: field
+                        grow: 1; font.size: 13; color: ink; autofocus: true
+                        placeholder: qsTr("Message #%1", roomTag)
+                        onAccepted: send()
+                    }
+                    Stack {
+                        Rectangle {
+                            width: 30; height: 30; radius: 15; halign: "center"; valign: "center"; colorAnimation: 140
+                            color: field.text.trim() ? primary : containerHighest
+                            Icon { name: "arrow.up"; font.size: 13; color: field.text.trim() ? onPrimary : faint }
+                        }
+                        Button { stateRadius: 15; onClicked: send() }
+                    }
+                }
+            }
+        }
+    }
+}

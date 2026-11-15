@@ -1,0 +1,420 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+Dock {
+    side: "top"; height: 0; span: "window"; resizable: false
+
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+
+    property int section: 0
+    property var sections: [
+        { title: "Rex Binary", icon: "app.badge" },
+        { title: "Rex Server", icon: "server.rack" },
+        { title: "Rex API", icon: "point.3.connected.trianglepath.dotted" },
+        { title: "RexSync", icon: "arrow.triangle.2.circlepath" },
+        { title: "GPU", icon: "cpu" },
+        { title: "Windows", icon: "macwindow.on.rectangle" },
+    ]
+    property string method: "server.version"
+    property string payload: ""
+
+    property var d: panel.open ? diagnostics : ({ binary: {}, server: {}, sync: {}, gpu: {}, calls: [], events: [], eventState: "inactive", eventError: "", following: false })
+
+    function short(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s }
+    function pct(f) { return f == null || f < 0 ? "–" : (f * 100).toFixed(f < 0.1 ? 1 : 0) + "%" }
+    function mb(m) { return m == null || m < 0 ? "–" : m >= 1024 ? (m / 1024).toFixed(1) + " GB" : Math.round(m) + " MB" }
+    function cpu(c) { return c == null || c < 0 ? "–" : c.toFixed(1) + "%" }
+    function when(t) {
+        if (!t) return "–"
+        const date = typeof t === "number" ? new Date(t) : new Date(String(t))
+        return isNaN(date) ? String(t) : date.toLocaleString(i18n.locale, { dateStyle: "medium", timeStyle: "short" })
+    }
+    function clock(t) { return t ? new Date(t).toLocaleTimeString(i18n.locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "" }
+    function row(label, value, path) { return { label: label, value: value == null || value === "" ? "–" : String(value), path: path || "" } }
+
+    function facts(i) {
+        const b = d.binary || {}, app = b.app || {}, stock = b.stock || {}, cli = b.cli || {}, ru = b.rexui || {}
+        const s = d.server || {}, cfg = s.config || {}, sy = d.sync || {}, ts = sy.tailscale || {}
+        if (i === 0) return [
+            { title: qsTr("This app"), rows: [row(qsTr("Name"), app.name), row(qsTr("Version"), app.version ? app.version + " (" + app.build + ")" : ""),
+                                             row(qsTr("Bundle"), app.bundleId), row(qsTr("Path"), app.path, app.path), row(qsTr("Process"), app.pid),
+                                             row(qsTr("CPU"), cpu(app.cpu)), row(qsTr("Memory"), mb(app.memory))] },
+            { title: qsTr("Rex, as installed"), rows: [row(qsTr("Version"), stock.version ? stock.version + " (" + stock.build + ")" : ""), row(qsTr("Path"), stock.path, stock.path)] },
+            { title: qsTr("Command line"), rows: [row("rex", cli.path, cli.path), row(qsTr("Present"), cli.exists ? qsTr("Yes") : qsTr("No"))] },
+            { title: qsTr("Interface"), rows: [row(qsTr("Library"), ru.dylib, ru.dylib), row(qsTr("Home"), ru.home, ru.home)] },
+        ]
+        if (i === 1) return [
+            { title: qsTr("Server"), rows: [row(qsTr("Status"), s.running ? qsTr("Running") : (s.error || qsTr("Not answering"))), row(qsTr("Version"), s.version),
+                                           row(qsTr("Commit"), short(s.commit, 12) + (s.dirty ? " " + qsTr("(modified)") : "")), row(qsTr("Built"), when(s.builtAt)),
+                                           row(qsTr("Platform"), s.platform), row(qsTr("API revision"), s.apiRevision)] },
+            { title: qsTr("Process"), rows: [row(qsTr("Process"), s.pid), row(qsTr("Started"), when(s.startedAt)), row(qsTr("CPU"), cpu(s.cpu)), row(qsTr("Memory"), mb(s.memory)),
+                                            row(qsTr("Socket"), s.socket, s.socket)] },
+            { title: qsTr("State"), rows: [row(qsTr("Sessions"), s.sessions), row(qsTr("Config generation"), cfg.generation), row(qsTr("Config hash"), short(cfg.hash, 16)),
+                                          row(qsTr("Instance"), s.instanceId), row(qsTr("Host"), s.hostId)] },
+        ]
+        if (i === 3) return [
+            { title: "Tailscale", rows: [row(qsTr("State"), ts.state), row(qsTr("Tailnet members"), ts.allow_tailnet_members ? qsTr("Allowed") : qsTr("Not allowed")),
+                                        row(qsTr("API revision"), sy.apiRevision)] },
+        ]
+        return []
+    }
+
+    function loadColor(u) { return u == null ? ink : u >= 80 ? red : u >= 50 ? primary : green }
+    function send() {
+        const m = method.trim()
+        if (m) diagnostics.call(m, payload.trim()).catch(() => {})
+    }
+
+    Drawer {
+        id: panel
+        lazy: true
+        placement: "center"; rounding: 0; shape: cutLarge; color: surface; animation: 300
+        width: 980; height: 680
+        command: ["client.diagnostics"]
+        exclusive: "rex-panels"
+        onCommanded: diagnostics.refresh()
+        onClosed: diagnostics.follow(false)
+
+        Row {
+            grow: 1
+            valign: "stretch"
+
+            Rectangle {
+                width: 224; color: container; padding: 16
+                Column {
+                    spacing: 4
+                    Row {
+                        spacing: 10; horizontalPadding: 4; verticalPadding: 4
+                        Stack { width: 20; height: 20; Shader { source: "shaders/emblem.metal"; colors: [signal, valley]; params: [0, 1, 1, 1.2]; running: motion && panel.open; fps: 30 } }
+                        Column { spacing: 1
+                            Text { text: "// " + caps(qsTr("System")); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.6; color: caption }
+                            Text { text: caps(qsTr("Device load")); font.family: fontWide; font.width: "expanded"; font.weight: "bold"; font.size: 14; font.letterSpacing: 0.6; color: ink } }
+                    }
+                    Item { height: 14 }
+                    List {
+                        grow: 1
+                        model: sections
+                        spacing: 1
+                        delegate: Stack {
+                            property bool on: index === section
+                            Rectangle {
+                                horizontalPadding: 10; verticalPadding: 7
+                                color: on ? signal : railHit.hovered ? containerHigh : "transparent"; colorAnimation: 140
+                                Row {
+                                    spacing: 10
+                                    Text { text: two(index + 1); font.family: fontMono; font.mono: true; font.size: 9; color: on ? alpha(onSignal, 0.6) : faint }
+                                    Icon { name: modelData.icon; font.size: 12; width: 16; colorAnimation: 140; color: on ? onSignal : caption }
+                                    Text { text: qsTr(modelData.title); font.family: fontUi; font.size: 13; colorAnimation: 140; font.weight: on ? "bold" : "regular"; color: on ? onSignal : inkDim }
+                                }
+                            }
+                            Button { id: railHit; stateLayer: false; onClicked: section = index }
+                        }
+                    }
+                    Row {
+                        spacing: 6; horizontalPadding: 6
+                        Rectangle { width: 6; height: 6; radius: 3; color: d.server.running ? green : red }
+                        Text { text: d.server.running ? qsTr("Connected to Rex") : qsTr("Not connected"); font.family: fontUi; font.size: 11; color: caption }
+                    }
+                }
+            }
+
+            Column {
+                grow: 1; padding: 28; spacing: 16
+
+                Row {
+                    spacing: 16; valign: "top"
+                    Heading {
+                        grow: 1; index: two(section + 1); code: qsTr("Device load"); title: qsTr(sections[section].title); ghost: sections[section].title
+                        sub: caps(section === 0 ? qsTr("The app and its command line") : section === 1 ? qsTr("The server every pane runs in")
+                            : section === 2 ? qsTr("Call the server, and watch what it says") : section === 3 ? qsTr("The servers Rex knows")
+                            : section === 4 ? qsTr("What the graphics card is doing") : qsTr("Rex's windows, kept in this one"))
+                    }
+                    Close { onClicked: panel.open = false }
+                }
+
+                List {
+                    grow: section === 3 ? 0 : 1; spacing: 14
+                    visible: section === 0 || section === 1 || section === 3
+                    model: section === 0 || section === 1 || section === 3 ? facts(section) : []
+                    delegate: Column {
+                        spacing: 6
+                        Text { text: modelData.title.toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                        Rectangle {
+                            radius: 0; color: container; border.width: 1; border.color: hairline; horizontalPadding: 16; verticalPadding: 6
+                            Column {
+                                List {
+                                    model: modelData.rows
+                                    delegate: Row {
+                                        spacing: 12; verticalPadding: 7
+                                        Text { text: modelData.label; font.family: fontUi; font.size: 13; color: inkDim; width: 150 }
+                                        Text { grow: 1; text: modelData.value; font.family: fontUi; font.size: 12.5; font.mono: !!modelData.path || /^[0-9a-f-]{12,}$/i.test(modelData.value); color: ink; maxLines: 1 }
+                                        Stack {
+                                            visible: !!modelData.path
+                                            Rectangle { width: 24; height: 24; radius: 0; halign: "center"; valign: "center"; Icon { name: "folder"; font.size: 10; color: caption } }
+                                            Button { stateRadius: 0; tip: qsTr("Show in Finder"); onClicked: diagnostics.reveal(modelData.path) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    visible: section === 3; spacing: 6
+                    Text { text: qsTr("Hosts").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                    Rectangle {
+                        radius: 0; color: container; border.width: 1; border.color: hairline; horizontalPadding: 16; verticalPadding: 6
+                        List {
+                            model: section === 3 ? (d.sync.hosts || []) : []
+                            delegate: Row {
+                                spacing: 12; verticalPadding: 8
+                                Rectangle { width: 7; height: 7; radius: 3.5; color: /^connected/.test(modelData.connection) ? green : orange }
+                                Text { text: modelData.home || /^unix:/.test(modelData.name || "") ? qsTr("This Mac") : modelData.name; font.family: fontUi; font.size: 13; color: ink; width: 170; maxLines: 1 }
+                                Text { grow: 1; text: String(modelData.connection || "").split("(")[0]; font.family: fontUi; font.size: 12; color: inkDim; maxLines: 1 }
+                                Text { text: (modelData.version || "") + "  ·  " + qsTr("%1 sessions", modelData.sessions || 0); font.family: fontUi; font.size: 12; color: caption }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 14
+                    visible: section === 2
+
+                    Rectangle {
+                        radius: 0; color: container; border.width: 1; border.color: hairline; padding: 16
+                        Column {
+                            spacing: 10
+                            Row {
+                                spacing: 10
+                                Text { text: qsTr("Method"); font.family: fontUi; font.size: 13; color: inkDim; width: 70 }
+                                Rectangle {
+                                    grow: 1; radius: 0; color: surface; horizontalPadding: 10; verticalPadding: 7; border.width: 1; border.color: hairline
+                                    TextField { text: method; font.mono: true; font.size: 12.5; color: ink; placeholder: "server.version"; onTextChanged: method = text; onAccepted: send() }
+                                }
+                            }
+                            Row {
+                                spacing: 10
+                                Text { text: qsTr("Payload"); font.family: fontUi; font.size: 13; color: inkDim; width: 70 }
+                                Rectangle {
+                                    grow: 1; radius: 0; color: surface; horizontalPadding: 10; verticalPadding: 7; border.width: 1; border.color: hairline
+                                    TextField { text: payload; font.mono: true; font.size: 12.5; color: ink; syntax: "js"; placeholder: qsTr("Optional JSON; blank sends none"); onTextChanged: payload = text; onAccepted: send() }
+                                }
+                                Stack {
+                                    Rectangle { radius: 0; color: signal; horizontalPadding: 16; verticalPadding: 7; Text { text: qsTr("Send"); font.family: fontUi; font.size: 13; font.weight: "medium"; color: onSignal } }
+                                    Button { stateRadius: 0; stateColor: onSignal; onClicked: send() }
+                                }
+                            }
+                        }
+                    }
+
+                    Row {
+                        grow: 1; spacing: 14; valign: "stretch"
+                        Column {
+                            grow: 1; spacing: 6
+                            Row {
+                                horizontalPadding: 4
+                                Text { text: (qsTr("Calls") + "  " + d.calls.length).toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                                Item { grow: 1 }
+                                Stack { Rectangle { horizontalPadding: 6; Text { text: qsTr("Clear"); font.family: fontUi; font.size: 11; color: caption } } Button { onClicked: diagnostics.clearCalls() } }
+                            }
+                            Rectangle {
+                                grow: 1; radius: 0; color: container; border.width: 1; border.color: hairline; padding: 12
+                                Column {
+                                    Text { visible: !d.calls.length; text: qsTr("No calls yet."); font.family: fontUi; font.size: 13; color: caption }
+                                    List {
+                                        grow: 1; spacing: 10
+                                        model: d.calls
+                                        delegate: Column {
+                                            spacing: 3
+                                            Row {
+                                                spacing: 8
+                                                Rectangle { width: 6; height: 6; radius: 3; color: modelData.outcome === "success" ? green : modelData.outcome === "failure" ? red : orange }
+                                                Text { text: modelData.method; font.mono: true; font.family: fontMono; font.size: 12; color: ink; grow: 1; maxLines: 1 }
+                                                Text { text: modelData.duration >= 0 ? modelData.duration + " ms" : qsTr("waiting"); font.family: fontUi; font.size: 11; font.tabular: true; color: caption }
+                                            }
+                                            Text { text: modelData.response; font.mono: true; font.family: fontMono; font.size: 11; color: inkDim; maxLines: 3; wrap: true; visible: !!modelData.response }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Column {
+                            grow: 1; spacing: 6
+                            Row {
+                                horizontalPadding: 4; spacing: 10
+                                Text { text: (qsTr("Events") + "  " + d.events.length).toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                                Text { text: d.eventState === "failed" ? short(d.eventError, 40) : qsTr(d.eventState); font.family: fontUi; font.size: 11; color: d.eventState === "failed" ? red : caption }
+                                Item { grow: 1 }
+                                Stack {
+                                    Rectangle { horizontalPadding: 6; Text { text: d.following ? qsTr("Stop") : qsTr("Follow"); font.family: fontUi; font.size: 11; font.weight: "medium"; color: d.following ? red : primary } }
+                                    Button { onClicked: diagnostics.follow(!d.following) }
+                                }
+                                Stack { Rectangle { horizontalPadding: 6; Text { text: qsTr("Clear"); font.family: fontUi; font.size: 11; color: caption } } Button { onClicked: diagnostics.clearEvents() } }
+                            }
+                            Rectangle {
+                                grow: 1; radius: 0; color: container; border.width: 1; border.color: hairline; padding: 12
+                                Column {
+                                    Text { visible: !d.events.length; text: d.following ? qsTr("Waiting for the server…") : qsTr("Follow to see the server's events."); font.family: fontUi; font.size: 13; color: caption }
+                                    List {
+                                        grow: 1; spacing: 10
+                                        model: d.events.slice(0, 80)
+                                        delegate: Column {
+                                            spacing: 3
+                                            Row {
+                                                spacing: 8
+                                                Text { text: modelData.type || "event"; font.mono: true; font.family: fontMono; font.size: 12; color: ink; grow: 1; maxLines: 1 }
+                                                Text { text: clock(modelData.receivedAt); font.family: fontUi; font.size: 11; font.tabular: true; color: caption }
+                                            }
+                                            Text { text: modelData.text; font.mono: true; font.family: fontMono; font.size: 11; color: inkDim; maxLines: 2; wrap: true }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 14
+                    visible: section === 4
+                    Grid {
+                        columns: 3; spacing: 14
+                        model: section === 4 ? [[qsTr("The GPU"), (d.gpu.utilization == null ? "–" : d.gpu.utilization + "%"), d.gpu.device || ""],
+                                                [qsTr("Rex UI"), pct(d.gpu.rex), qsTr("of the GPU's time")],
+                                                [qsTr("WindowServer"), pct(d.gpu.windowServer), qsTr("drawing the screen")]] : []
+                        delegate: Rectangle {
+                            radius: 0; color: container; border.width: 1; border.color: hairline; padding: 16
+                            Column {
+                                spacing: 4
+                                Text { text: modelData[0].toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: caption }
+                                Text { text: modelData[1]; font.family: fontNum; font.weight: "light"; font.size: 40; font.tabular: true
+                                    color: index === 0 ? loadColor(d.gpu.utilization) : ink }
+                                Text { text: modelData[2]; font.family: fontUi; font.size: 12; color: inkDim; maxLines: 1 }
+                            }
+                        }
+                    }
+                    Rectangle {
+                        radius: 0; color: container; border.width: 1; border.color: hairline; padding: 16
+                        Column {
+                            spacing: 8
+                            Text { text: qsTr("The last two minutes").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                            Grid {
+                                columns: 60; spacing: 2
+                                model: section === 4 ? (d.gpu.history || []).slice(-60) : []
+                                delegate: Stack {
+                                    height: 56; valign: "bottom"
+                                    Rectangle { height: Math.max(2, 56 * (modelData.utilization || 0) / 100); radius: 1; color: hairline }
+                                    Rectangle { height: Math.max(modelData.rex > 0 ? 2 : 0, 56 * (modelData.rex || 0)); radius: 1; color: signal }
+                                }
+                            }
+                        }
+                    }
+                    Column {
+                        grow: 1; spacing: 6
+                        Text { text: qsTr("By process").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                        Rectangle {
+                            grow: 1; radius: 0; color: container; border.width: 1; border.color: hairline; horizontalPadding: 16; verticalPadding: 6
+                            List {
+                                model: section === 4 ? (d.gpu.processes || []) : []
+                                delegate: Row {
+                                    spacing: 12; verticalPadding: 6
+                                    Text { text: modelData.name; font.family: fontUi; font.size: 13; color: ink; width: 200; maxLines: 1 }
+                                    Rectangle {
+                                        width: 360; height: 4; radius: 2; color: hairline; halign: "left"
+                                        Rectangle { width: Math.max(2, 360 * modelData.fraction); height: 4; radius: 2; color: modelData.pid === d.binary.app.pid ? signal : caption }
+                                    }
+                                    Item { grow: 1 }
+                                    Text { text: pct(modelData.fraction); font.family: fontUi; font.size: 12; font.tabular: true; color: inkDim; width: 48 }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 14
+                    visible: section === 5
+                    Rectangle {
+                        radius: 0; color: container; border.width: 1; border.color: hairline; padding: 16
+                        Row {
+                            spacing: 12
+                            Icon { name: windows.guarding ? "lock.fill" : "lock.open"; font.size: 14; color: windows.guarding ? primary : caption }
+                            Column {
+                                grow: 1; spacing: 2
+                                Text { text: windows.guarding ? qsTr("Rex opens no windows of its own") : qsTr("Rex opens its own windows"); font.family: fontUi; font.size: 14; color: ink }
+                                Text { text: qsTr("rex_windows in rui-config.lua"); font.family: fontMono; font.size: 11; font.mono: true; color: inkDim }
+                            }
+                            Stack {
+                                Rectangle { radius: 0; border.width: 1; border.color: hairline; horizontalPadding: 14; verticalPadding: 6; Text { text: qsTr("Rex's own Diagnostics"); font.family: fontUi; font.size: 12; color: inkDim } }
+                                Button { stateRadius: 0; onClicked: { panel.open = false; windows.open("diagnostics") } }
+                            }
+                        }
+                    }
+                    Text { text: qsTr("Held back").toUpperCase(); font.family: fontWide; font.width: "expanded"; font.size: 9.5; font.weight: "semibold"; font.letterSpacing: 1.2; color: primary }
+                    Rectangle {
+                        grow: 1; radius: 0; color: container; border.width: 1; border.color: hairline; horizontalPadding: 16; verticalPadding: 8
+                        Column {
+                            Text { visible: !windows.held.length; text: qsTr("None yet."); font.family: fontUi; font.size: 13; color: caption }
+                            List {
+                                model: windows.held
+                                delegate: Row {
+                                    spacing: 12; verticalPadding: 7
+                                    Text { text: modelData.title || modelData.id; font.family: fontUi; font.size: 13; color: ink; width: 220; maxLines: 1 }
+                                    Text { grow: 1; text: modelData.command; font.mono: true; font.family: fontMono; font.size: 12; color: inkDim; maxLines: 1 }
+                                    Text { text: clock(modelData.time); font.family: fontUi; font.size: 11; font.tabular: true; color: caption }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+}

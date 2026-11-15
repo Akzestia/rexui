@@ -1,0 +1,11 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+module(name = "rexui", version = "1.0.0")
+
+bazel_dep(name = "rules_cc", version = "0.2.27")
+bazel_dep(name = "apple_support", version = "2.11.0")
+bazel_dep(name = "rules_shell", version = "0.8.0")
+bazel_dep(name = "rules_swift", version = "4.2.2")
+
+bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2", dev_dependency = True)
+bazel_dep(name = "googletest", version = "1.18.0.bcr.1", dev_dependency = True)

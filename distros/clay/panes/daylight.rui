@@ -1,0 +1,45 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Dock {
+    title: "Daylight"; icon: "sun.horizon.fill"
+    color: container
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var pal: (light ? "faf9f5 f0eee6 e8e6dc dedcd1 c6613f ffffff 141413 5e5d59 87867f"
+                             : "1f1e1d 262624 30302e 3a3936 d97757 ffffff f5f4ef c2c0b6 8e8c85").split(" ").map((c) => "#" + c)
+    property var container: pal[1]
+    property var primary: pal[4]
+    property var ink: pal[6]
+    property var inkDim: pal[7]
+    property var outline: pal[8]
+    property var clay: "#d97757"
+    property var heather: "#cbcadb"
+
+    property var now: new Date()
+    Timer { interval: 60000; aligned: true; onTriggered: now = new Date() }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property real day: (now.getHours() * 60 + now.getMinutes()) / 1440
+    function part() {
+        const h = now.getHours();
+        return h < 5 ? qsTr("Night") : h < 12 ? qsTr("Morning") : h < 18 ? qsTr("Afternoon") : h < 22 ? qsTr("Evening") : qsTr("Night");
+    }
+
+    Stack {
+        grow: 1
+        Shader {
+            source: "../ui/shaders/halftone.metal"; running: false
+            params: [day, 9, 0.62]
+            colors: [clay, heather, light ? "#55141413" : "#55faf9f5"]
+        }
+        Column {
+            valign: "bottom"; padding: 36; spacing: 4
+            Text { text: part().toUpperCase(); font.size: 11; font.weight: "semibold"; font.letterSpacing: 1.6; color: primary }
+            Text { text: two(now.getHours()) + ":" + two(now.getMinutes()); font.family: "serif"; font.size: 72; font.tabular: true; color: ink }
+            Text {
+                text: now.toLocaleDateString(i18n.locale, { weekday: "long", day: "numeric", month: "long" }) + "  ·  " + qsTr("%1% of the day gone", Math.round(day * 100))
+                font.family: "serif"; font.italic: true; font.size: 16; color: inkDim
+            }
+        }
+    }
+}

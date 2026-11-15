@@ -1,0 +1,10 @@
+{
+  "name": "tree-sitter-rui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "rexui's .rui files: QML-style elements with JavaScript bindings",
+  "devDependencies": {
+    "tree-sitter-javascript": "0.25.0"
+  }
+}

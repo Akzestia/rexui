@@ -1,0 +1,14 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: LicenseRef-rexui-1.0
+Stack {
+    id: pb
+    height: 6
+    property real value: 0
+    property var tint: "accent"
+    property var track: theme.dark ? "#26ffffff" : "#1a000000"
+    Rectangle { radius: 3; color: pb.track; clips: true }
+    Rectangle {
+        radius: 3; color: pb.tint; animate: 180; easing: "standard"
+        width: Math.max(0, Math.min(1, pb.value)) * pb.layoutWidth
+    }
+}

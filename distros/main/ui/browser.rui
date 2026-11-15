@@ -1,0 +1,56 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    side: "right"; width: 560
+    spacing: 8
+    group: "side"; title: web.title || qsTr("Browser"); iconColor: "#0a84ff"
+    icon: web.favicon || "safari.fill"
+    key: "cmd+b"
+    bar: "float"; barKey: "cmd+s"
+    searchKey: "cmd+\\"
+    search: "https://duckduckgo.com/?q="; searchColor: "#de5833"
+    Process { id: scheme; command: ["rexui-prefs", "dashboard"] }
+    barColor: scheme.state.surface || ""
+
+    property bool editing: false
+    Row {
+        visible: editing
+        spacing: 2
+        Button { icon: "chevron.left"; font.size: 13; enabled: web.canGoBack; opacity: web.canGoBack ? 0.9 : 0.25; onClicked: web.back() }
+        Button { icon: "chevron.right"; font.size: 13; enabled: web.canGoForward; opacity: web.canGoForward ? 0.9 : 0.25; onClicked: web.forward() }
+        Button {
+            icon: web.loading ? "xmark" : "arrow.clockwise"; font.size: 12; opacity: 0.9
+            onClicked: web.loading ? web.stop() : web.reload()
+        }
+        Item { width: 6 }
+        Rectangle {
+            grow: 1; radius: 8; color: rgba(255, 255, 255, 0.07)
+            horizontalPadding: 10; verticalPadding: 5
+            TextField {
+                id: address
+                placeholder: qsTr("Search Google or type a URL")
+                font.size: 12
+                onAccepted: {
+                    if (["ublock", "ubo", "ubol"].includes(text.trim().toLowerCase())) web.adblockSettings()
+                    else web.load(text)
+                    editing = false; web.forceActiveFocus()
+                }
+                onCancelled: { editing = false; web.forceActiveFocus() }
+            }
+        }
+    }
+
+    Rectangle {
+        grow: 1; radius: 10
+        WebView {
+            id: web
+            cookies: "zen"
+            storage: ["discord.com"]
+            adblock: true
+            search: "https://www.google.com/search?q="
+            url: "https://www.youtube.com"
+            onCurrentUrlChanged: address.text = currentUrl
+            onCommand: if (name === "address") { editing = true; address.text = currentUrl; address.forceActiveFocus() }
+        }
+    }
+}

@@ -1,0 +1,424 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+use "rexshared" as Shared
+Dock {
+    id: settingsTop
+    Shared.SettingsCore { id: core; cmdField: cmdField; cmdk: cmdk; confSettle: confSettle; expectEnd: expectEnd; prefs: prefs; run: settingsTop.run; rx: rx; search: search; sections: settingsTop.sections }
+    side: "top"; height: 0; span: "window"; resizable: false
+
+    Process { id: rx; command: "rexui-rex"; onStateChanged: core.settle(state.defaults || {}) }
+    Process { id: prefs; command: ["rexui-prefs", "dashboard"] }
+    property string palette: prefs.state.palette || "caelestia"
+    property string scheme: prefs.state.scheme || "auto"
+    property bool light: scheme === "light" || (scheme === "auto" && !theme.dark)
+    Palette { id: colours; chosen: palette; lightMode: light }
+    property var pal: colours.pal
+    property var surface: pal.surface
+    property var container: pal.container
+    property var containerHigh: pal.containerHigh
+    property var containerHighest: pal.containerHighest
+    property var primary: pal.primary
+    property var onPrimary: pal.onPrimary
+    property var primaryContainer: pal.primaryContainer
+    property var onPrimaryContainer: pal.onPrimaryContainer
+    property var secondary: pal.secondary
+    property var onSecondary: pal.onSecondary
+    property var secondaryContainer: pal.secondaryContainer
+    property var onSecondaryContainer: pal.onSecondaryContainer
+    property var tertiary: pal.tertiary
+    property var success: pal.success
+    property var ink: pal.ink
+    property var inkDim: pal.inkDim
+    property var outline: pal.outline
+    Process {
+        id: nvimOpen; restart: false; running: !!core.configPath
+        command: core.nvimRemote
+    }
+    property var luaColors: ({ comment: outline, string: tertiary, keyword: primary, number: secondary, call: secondary })
+    property var confColors: ({ comment: outline, string: tertiary, keyword: secondary, number: secondary, key: primary })
+    property var outlineVariant: pal.outlineVariant
+
+    property var sections: core.rexSections({}, [
+        { title: "main", icon: "square.grid.2x2", rows: [
+            core.rexuiOpt(core.tx("github-user", "GitHub user", "", "The GitHub dock opens on this user's profile; empty: GitHub's home.")),
+        ] },
+    ])
+
+    function run(name, args) { rex.run(name, args || undefined); }
+    Timer { id: confSettle; interval: 3000; repeat: false; running: false; onTriggered: { running = false; core.confPending = ({}); } }
+    Timer {
+        id: expectEnd; interval: 2000; repeat: false; running: false
+        onTriggered: { running = false; core.pending = ({}); rx.send({ refresh: "defaults" }); }
+    }
+
+    FileDialog {
+        id: themeFile; title: qsTr("Import a theme file")
+        onAccepted: run("client.theme.import", { path: path })
+    }
+    FileDialog {
+        id: gifFile; title: qsTr("Choose a background GIF"); types: ["gif"]
+        onAccepted: rx.send({ conf: { "background-gif": path } })
+    }
+
+    Drawer {
+        id: cmdk
+        placement: "top"; rounding: 20; color: surface; animation: 260
+        width: core.cmdWidth; padding: 8; spacing: 4; resizable: false
+        command: core.ownPalette ? ["client.palette.toggle"] : []
+        onCommanded: { core.cmdAsk = null; cmdField.text = ""; core.cmdQuery = ""; core.cmdPicked = 0; core.cmdKeys = rex.shortcuts(); core.cmdOpen = true; }
+        onClosed: { core.cmdOpen = false; core.cmdAsk = null; }
+
+        Rectangle {
+            radius: 13; color: containerHigh; horizontalPadding: 12; verticalPadding: 8
+            Row {
+                spacing: 9
+                Icon { name: core.cmdAsk ? "chevron.right" : "magnifyingglass"; font.size: 13; color: primary }
+                Text { visible: !!core.cmdAsk; text: core.cmdAsk ? core.cmdAsk.it.label.replace(/…$/, "") : ""; font.size: 14; font.weight: "semibold"; color: primary }
+                TextField {
+                    id: cmdField
+                    grow: 1; font.size: 14; color: ink
+                    placeholder: core.cmdAsk ? core.cmdAsk.need[0] + (core.cmdAbout(core.cmdAsk) ? ": " + core.cmdAbout(core.cmdAsk) : "") : qsTr("Run a command, go to a tab, pick a theme…")
+                    autofocus: true; arrows: true
+                    onTextChanged: { if (core.cmdAsk) core.cmdArg = text; else { core.cmdQuery = text; core.cmdPicked = 0; } }
+                    onAccepted: { if (core.cmdAsk) core.cmdGive(core.cmdArg); else core.cmdRun(core.cmdItems[core.cmdPicked]); }
+                    onCancelled: { if (core.cmdAsk) { core.cmdAsk = null; cmdField.text = core.cmdQuery; } else cmdk.open = false; }
+                    onArrow: { if (!core.cmdAsk) core.cmdMove(direction); }
+                }
+            }
+        }
+        List {
+            visible: !core.cmdAsk && core.cmdItems.length > 0
+            spacing: 1; maxHeight: 340
+            reveal: core.cmdOpen ? core.cmdPicked : -1
+            model: core.cmdItems
+            delegate: Stack {
+                Rectangle {
+                    radius: 10; horizontalPadding: 10; verticalPadding: 6
+                    color: index === core.cmdPicked ? secondaryContainer : "transparent"; colorAnimation: 90
+                    Row {
+                        spacing: 8
+                        Icon { name: modelData.icon || "command"; font.size: 12; width: 18; color: index === core.cmdPicked ? onSecondaryContainer : primary }
+                        Text { text: modelData.label; font.size: 13; color: index === core.cmdPicked ? onSecondaryContainer : ink }
+                        Item { grow: 1 }
+                        Text { visible: !!modelData.kind; text: qsTr(modelData.kind); font.size: 10; color: index === core.cmdPicked ? onSecondaryContainer : inkDim }
+                        Rectangle {
+                            visible: modelData.keys.length > 0; radius: 6; color: index === core.cmdPicked ? surface : containerHighest
+                            horizontalPadding: 6; verticalPadding: 1
+                            Text { text: modelData.keys.join("  "); font.size: 10; font.mono: true; color: index === core.cmdPicked ? primary : inkDim }
+                        }
+                    }
+                }
+                Button { onClicked: core.cmdRun(modelData) }
+            }
+        }
+        Item {
+            visible: !core.cmdAsk && core.cmdItems.length === 0; horizontalPadding: 10; verticalPadding: 6
+            Text { text: qsTr("Nothing matches “%1”.", core.cmdQuery); font.size: 12; color: inkDim }
+        }
+        Row {
+            horizontalPadding: 10; spacing: 12
+            Text { text: core.cmdAsk ? (core.cmdAsk.need.length > 1 ? qsTr("↩ next") : qsTr("↩ run")) : qsTr("↑↓ choose"); font.size: 10; color: outline }
+            Text { text: core.cmdAsk ? qsTr("esc back") : qsTr("↩ run"); font.size: 10; color: outline }
+            Text { visible: !core.cmdAsk; text: qsTr("esc close"); font.size: 10; color: outline }
+            Item { grow: 1 }
+            Text { visible: !core.cmdAsk && core.cmdFound.length > 0; text: core.cmdFound.length > core.cmdItems.length ? qsTr("%1 of %2 commands", core.cmdItems.length, core.cmdFound.length) : qsTr(core.cmdFound.length === 1 ? "%1 command" : "%1 commands", core.cmdFound.length); font.size: 10; color: outline }
+        }
+    }
+
+    Drawer {
+        id: panel
+        placement: "center"; rounding: 28; color: surface; animation: 420
+        width: 1040; height: 700
+        command: ["client.settings", "client.config.open"]
+        onCommanded: { if (name === "client.config.open") { core.clearSearch(); core.section = core.sectionOf("config"); } }
+        onClosed: core.clearSearch()
+
+        Row {
+            grow: 1
+            valign: "stretch"
+
+            Rectangle {
+                width: 236; color: container; padding: 14
+                Column {
+                    spacing: 4
+                    Row {
+                        spacing: 10; horizontalPadding: 6
+                        Icon { name: "gearshape.fill"; font.size: 18; color: primary }
+                        Text { text: qsTr("Settings"); font.size: 20; font.weight: "bold"; color: ink }
+                    }
+                    Item { height: 8 }
+                    Rectangle {
+                        radius: 12; color: containerHigh; horizontalPadding: 10; verticalPadding: 7
+                        Row {
+                            spacing: 8
+                            Icon { name: "magnifyingglass"; font.size: 12; color: inkDim }
+                            TextField { id: search; grow: 1; placeholder: qsTr("Search"); font.size: 13; color: ink; autofocus: true; onTextChanged: core.query = text; onCancelled: core.clearSearch() }
+                        }
+                    }
+                    Item { height: 8 }
+                    List {
+                        grow: 1
+                        model: sections
+                        delegate: Stack {
+                            Rectangle {
+                                radius: 12; horizontalPadding: 12; verticalPadding: 8
+                                color: !core.query && index === core.section ? secondaryContainer : "transparent"; colorAnimation: 160
+                                Row {
+                                    spacing: 10
+                                    Icon { name: modelData.icon; font.size: 13; colorAnimation: 160; color: !core.query && index === core.section ? onSecondaryContainer : inkDim }
+                                    Text { text: qsTr(modelData.title); font.size: 13; colorAnimation: 160; font.weight: !core.query && index === core.section ? "semibold" : "regular"; color: !core.query && index === core.section ? onSecondaryContainer : ink }
+                                }
+                            }
+                            Button { onClicked: { core.clearSearch(); core.section = index; } }
+                        }
+                    }
+                    Text { text: rx.state.version || ""; font.size: 10; color: outline }
+                }
+            }
+
+            Column {
+                grow: 1; padding: 22; spacing: 14
+
+                Row {
+                    Text { text: core.query ? qsTr("Search") : qsTr(core.page.title); font.size: 24; font.weight: "bold"; color: ink }
+                    Item { grow: 1 }
+                    Stack {
+                        Rectangle { width: 32; height: 32; radius: 16; color: containerHigh; halign: "center"; valign: "center"; Icon { name: "xmark"; font.size: 12; color: inkDim } }
+                        Button { onClicked: panel.open = false }
+                    }
+                }
+
+                Stack {
+                    grow: 1; detachHidden: true
+                    visible: !!core.query || !core.page.special
+                    model: core.pageList
+                    delegate: Stack {
+                        property bool ready: false
+                        visible: modelData.search ? !!core.query : !core.query && index === core.section
+                        Timer { interval: 300 + index * 120; repeat: false; onTriggered: ready = true }
+                        List {
+                            spacing: 8
+                            model: modelData.search ? (core.query ? core.found(core.query) : []) : (ready || index === core.section ? modelData.rows : [])
+                            delegate: Rectangle {
+                                property var r: modelData
+                                radius: 16; padding: r.k === "heading" || r.k === "note" ? 0 : 14
+                                horizontalPadding: r.k === "heading" || r.k === "note" ? 6 : 16; verticalPadding: r.k === "heading" ? 4 : (r.k === "note" ? 0 : 14)
+                                color: r.k === "heading" || r.k === "note" ? "transparent" : container
+                                Column {
+                                    spacing: 10; detachHidden: true
+                                    Text { visible: r.k === "heading"; text: qsTr(r.label); font.size: 13; font.weight: "semibold"; color: primary }
+                                    Text { visible: r.k === "note"; text: qsTr(r.label); font.size: 13; color: inkDim; wrap: true }
+                                    Row {
+                                        visible: r.k !== "heading" && r.k !== "note"; spacing: 12; detachHidden: true
+                                        Column {
+                                            grow: 1; spacing: 3
+                                            Text { text: qsTr(r.label); font.size: 14; color: ink }
+                                            Text { visible: !!r.help; text: qsTr(r.help); font.size: 11; color: inkDim; wrap: true }
+                                        }
+                                        Stack {
+                                            visible: !!r.key && r.k !== "action" && core.isSet(r)
+                                            Rectangle { width: 26; height: 26; radius: 13; color: "transparent"; halign: "center"; valign: "center"; Icon { name: "arrow.uturn.backward"; font.size: 11; color: outline } }
+                                            Button { onClicked: core.setv(r, null) }
+                                        }
+                                        Text { visible: r.k === "number"; text: r.k === "number" ? core.shown(r) : ""; font.size: 13; font.mono: true; color: primary }
+                                        Text { visible: r.k === "info"; text: r.k === "info" ? r.get() : ""; font.size: 12; font.mono: true; color: inkDim }
+                                        Stack {
+                                            visible: r.k === "switch"; width: 46; height: 26
+                                            Rectangle { radius: 13; color: core.val(r) ? primary : containerHighest; colorAnimation: 180 }
+                                            Row {
+                                                verticalPadding: 3
+                                                Item { width: core.val(r) ? 23 : 3; animate: 220 }
+                                                Rectangle { width: 20; height: 20; radius: 10; color: core.val(r) ? onPrimary : outline; colorAnimation: 180 }
+                                            }
+                                            Button { onClicked: core.setv(r, !core.val(r)) }
+                                        }
+                                        Rectangle {
+                                            visible: r.k === "text" || r.k === "color"; width: 280; radius: 10; color: containerHigh
+                                            horizontalPadding: 10; verticalPadding: 6
+                                            Row {
+                                                spacing: 8
+                                                Rectangle { visible: r.k === "color"; width: 14; height: 14; radius: 7; color: r.k === "color" && core.val(r) ? core.val(r) : primary }
+                                                TextField {
+                                                    grow: 1; font.size: 13; color: ink
+                                                    text: r.k === "text" || r.k === "color" ? String(core.val(r) ?? "") : ""
+                                                    placeholder: qsTr(r.hint) || (r.k === "color" ? "#rrggbb" : "")
+                                                    onAccepted: core.setv(r, text)
+                                                }
+                                                Stack {
+                                                    visible: r.key === "background-gif"
+                                                    Icon { name: "folder"; font.size: 12; color: inkDim }
+                                                    Button { onClicked: gifFile.open() }
+                                                }
+                                            }
+                                        }
+                                        Stack {
+                                            visible: r.k === "action" || r.k === "import"
+                                            Rectangle {
+                                                radius: 12; color: primaryContainer; horizontalPadding: 14; verticalPadding: 7
+                                                Text { text: qsTr(r.k === "import" ? "Import…" : (r.button || "Run")); font.size: 12; font.weight: "semibold"; color: onPrimaryContainer }
+                                            }
+                                            Button { onClicked: { if (r.k === "import") themeFile.open(); else run(r.run, r.args); } }
+                                        }
+                                    }
+                                    Slider {
+                                        visible: r.k === "number"
+                                        from: r.min || 0; to: r.max || 1; value: r.k === "number" ? core.val(r) : 0
+                                        onMoved: { const v = core.snap(r, value); if (r.src !== "conf" || v !== core.val(r)) core.setv(r, v); }
+                                        onReleased: core.setv(r, core.snap(r, value))
+                                    }
+                                    Grid {
+                                        visible: r.k === "choice" || r.k === "multi"; spacing: 6
+                                        columns: Math.min(6, (r.options || []).length || 1)
+                                        model: (r.options || []).map((o) => ({ o: o, r: r }))
+                                        delegate: Stack {
+                                            Rectangle {
+                                                radius: 10; horizontalPadding: 10; verticalPadding: 7
+                                                color: core.chosen(modelData.r, modelData.o[0]) ? primary : containerHigh; colorAnimation: 160
+                                                Text { text: qsTr(modelData.o[1]); align: "center"; font.size: 12; font.weight: "medium"; colorAnimation: 160; color: core.chosen(modelData.r, modelData.o[0]) ? onPrimary : ink }
+                                            }
+                                            Button { onClicked: core.choose(modelData.r, modelData.o[0]) }
+                                        }
+                                    }
+                                    List {
+                                        visible: r.k === "font"; height: r.k === "font" ? 200 : 0
+                                        model: r.k === "font" ? core.fonts.map((f) => ({ f: f, r: r })) : []
+                                        delegate: Stack {
+                                            Rectangle {
+                                                radius: 8; horizontalPadding: 10; verticalPadding: 5
+                                                color: core.val(modelData.r) === modelData.f ? secondaryContainer : "transparent"; colorAnimation: 160
+                                                Row {
+                                                    Text { text: modelData.f; font.family: modelData.f; font.size: 13; color: core.val(modelData.r) === modelData.f ? onSecondaryContainer : ink }
+                                                    Item { grow: 1 }
+                                                    Icon { visible: core.val(modelData.r) === modelData.f; name: "checkmark"; font.size: 11; color: onSecondaryContainer }
+                                                }
+                                            }
+                                            Button { onClicked: core.setv(modelData.r, modelData.f) }
+                                        }
+                                    }
+                                    Grid {
+                                        visible: r.k === "themes"; columns: 3; spacing: 6
+                                        model: r.k === "themes" ? core.themeChoices(r).map((o) => ({ o: o, r: r })) : []
+                                        delegate: Stack {
+                                            Rectangle {
+                                                radius: 10; horizontalPadding: 10; verticalPadding: 7
+                                                color: core.val(modelData.r) === modelData.o[0] ? primary : containerHigh; colorAnimation: 160
+                                                Row {
+                                                    spacing: 6
+                                                    Icon { visible: core.val(modelData.r) === modelData.o[0]; name: "checkmark"; font.size: 10; color: onPrimary }
+                                                    Text { text: modelData.o[1]; font.size: 12; colorAnimation: 160; color: core.val(modelData.r) === modelData.o[0] ? onPrimary : ink }
+                                                }
+                                            }
+                                            Button { onClicked: core.setv(modelData.r, modelData.o[0]) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 10
+                    visible: !core.query && core.page.special === "shortcuts"
+                    Text { text: qsTr("Keys from init.lua; Rex reloads it after each change. Click + key, then press the keys (Esc cancels). A key bound here replaces Rex's built-in shortcut for that key; a dock's own key (its .rui file's key) wins over both."); font.size: 12; color: inkDim; wrap: true }
+                    Row {
+                        spacing: 8
+                        Rectangle {
+                            grow: 1; radius: 12; color: containerHigh; horizontalPadding: 10; verticalPadding: 7
+                            Row { spacing: 8; Icon { name: "magnifyingglass"; font.size: 12; color: inkDim }; TextField { grow: 1; text: core.keyFilter; placeholder: qsTr("Filter: an action, or a key such as ctrl+d"); font.size: 13; color: ink; onTextChanged: core.keyFilter = text } }
+                        }
+                        Stack { Rectangle { radius: 12; color: primaryContainer; horizontalPadding: 14; verticalPadding: 7; Text { text: qsTr("Reload config"); font.size: 12; color: onPrimaryContainer } }; Button { onClicked: run("client.config.reload") } }
+                    }
+                    List {
+                        grow: 1; spacing: 6
+                        model: core.shortcutRows
+                        delegate: Rectangle {
+                            radius: 12; color: container; horizontalPadding: 14; verticalPadding: 9
+                            property bool recording: false
+                            Row {
+                                spacing: 10
+                                Column {
+                                    grow: 1
+                                    Text { text: qsTr(modelData.title); font.size: 13; color: ink }
+                                    Text { text: modelData.name; font.size: 10; font.mono: true; color: inkDim }
+                                }
+                                Grid {
+                                    columns: Math.max(1, modelData.keys.length); spacing: 6
+                                    model: modelData.keys
+                                    delegate: Stack {
+                                        Rectangle {
+                                            radius: 7; color: containerHighest; horizontalPadding: 8; verticalPadding: 4
+                                            Row { spacing: 6; Text { text: modelData; font.size: 12; font.mono: true; color: primary }; Icon { name: "xmark"; font.size: 9; color: outline } }
+                                        }
+                                        Button { onClicked: rx.send({ unbind: modelData }) }
+                                    }
+                                }
+                                Stack {
+                                    Rectangle {
+                                        width: 130; radius: 8; color: recording ? primaryContainer : containerHigh; horizontalPadding: 8; verticalPadding: 4
+                                        Text { text: recording ? qsTr("Press keys…") : qsTr("+ key"); font.size: 12; font.mono: true; color: recording ? onPrimaryContainer : inkDim }
+                                    }
+                                    Button {
+                                        onClicked: { recording = !recording; recordKey(recording); }
+                                        onKeyRecorded: { recording = false; if (key) rx.send({ bind: { key: key, action: modelData.name } }); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 10
+                    visible: !core.query && core.page.special === "config"
+                    Row {
+                        spacing: 6
+                        Stack { Rectangle { radius: 10; horizontalPadding: 12; verticalPadding: 6; color: core.file === 0 ? primary : containerHigh; Text { text: "init.lua"; font.size: 12; font.mono: true; color: core.file === 0 ? onPrimary : ink } }; Button { onClicked: core.file = 0 } }
+                        Stack { Rectangle { radius: 10; horizontalPadding: 12; verticalPadding: 6; color: core.file === 1 ? primary : containerHigh; Text { text: "rui-config.lua"; font.size: 12; font.mono: true; color: core.file === 1 ? onPrimary : ink } }; Button { onClicked: core.file = 1 } }
+                        Item { grow: 1 }
+                        Text { text: core.file === 0 ? ((rx.state.paths || {}).init || "") : ((rx.state.paths || {}).conf || ""); font.size: 11; font.mono: true; color: outline }
+                    }
+                    Rectangle {
+                        grow: 1; radius: 16; color: container; padding: 6
+                        TabPreview {
+                            height: 560; radius: 10
+                            session: "rexui-config"; cwd: "~/.config/rex"
+                            command: core.nvimListen
+                        }
+                    }
+                    Row {
+                        spacing: 8
+                        Text { text: qsTr("nvim: :w saves (init.lua: Rex reloads it; rui-config.lua: applied within 3 s). Esc is nvim's here; close with ✕ or a click outside."); font.size: 11; color: inkDim; wrap: true; grow: 1 }
+                    }
+                }
+
+                Column {
+                    grow: 1; spacing: 10
+                    visible: !core.query && core.page.special === "commands"
+                    Rectangle {
+                        radius: 12; color: containerHigh; horizontalPadding: 10; verticalPadding: 7
+                        Row { spacing: 8; Icon { name: "line.3.horizontal.decrease"; font.size: 12; color: inkDim }; TextField { grow: 1; text: core.filter; placeholder: qsTr("Filter commands"); font.size: 13; color: ink; onTextChanged: core.filter = text } }
+                    }
+                    List {
+                        grow: 1; spacing: 4
+                        model: core.commands
+                        delegate: Stack {
+                            Rectangle {
+                                radius: 10; color: container; horizontalPadding: 14; verticalPadding: 8
+                                Row {
+                                    spacing: 10
+                                    Text { text: qsTr(modelData.title); font.size: 13; color: ink }
+                                    Text { text: modelData.name; font.size: 11; font.mono: true; color: outline }
+                                    Item { grow: 1 }
+                                    Text { visible: (modelData.args || []).length > 0; text: (modelData.args || []).join(", "); font.size: 11; color: inkDim }
+                                    Icon { visible: !(modelData.args || []).some((a) => !a.endsWith("?")); name: "play.fill"; font.size: 10; color: primary }
+                                }
+                            }
+                            Button { onClicked: { if (!(modelData.args || []).some((a) => !a.endsWith("?"))) { panel.open = false; run(modelData.name); } } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,22 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: GPL-3.0-only
+Dock {
+    title: "Hello"; icon: "hand.wave"
+    padding: 24
+    halign: "center"; valign: "center"
+    property var now: new Date()
+    property int clicks: 0
+    property string typed: ""
+    Timer { interval: 1000; aligned: true; onTriggered: now = new Date() }
+
+    Column {
+        spacing: 14
+        halign: "center"
+        valign: "center"
+        Text { text: now.toLocaleTimeString(); font.size: 48; font.weight: "thin" }
+        Text { text: "A .rui file in a pane"; font.size: 16; font.bold: true }
+        Button { text: "Clicked " + clicks; style: "bordered"; onClicked: clicks += 1 }
+        TextField { width: 260; placeholder: "Type and press Return"; onAccepted: { typed = text; text = "" } }
+        Text { text: typed ? "“" + typed + "”" : ""; color: "#9aa0a6" }
+    }
+}

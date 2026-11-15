@@ -1,0 +1,108 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Panes {
+    radius: 12
+    spotlight: false
+
+    property string scheme: conf.values["clay-scheme"] || "auto"
+    property bool light: scheme === "ivory" || (scheme === "auto" && !theme.dark)
+    property var hairline: light ? "#24141413" : "#22faf9f5"
+    property var glow: light ? "#f6d9c9" : "#4a2a1e"
+    property var ink: light ? "#141413" : "#faf9f5"
+    property var clay: "#d97757"
+    property var kraft: "#d4a27f"
+    property var heather: "#cbcadb"
+    property var manilla: "#ebdbbc"
+    property bool motion: conf.values["clay-motion"] !== "false"
+    property string fallback: conf.values["clay-pane-background"] || "contour"
+    property string picture: conf.values["clay-pane-image"] || conf.values["background-gif"] || ""
+    function confNum(k, d) { const v = parseFloat(conf.values[k]); return isNaN(v) ? d : v; }
+    property real dimDefault: confNum("clay-pane-dim", 0.7)
+    property real blurDefault: confNum("clay-pane-blur", 0)
+    property var now: new Date()
+    Timer { interval: 60000; aligned: true; onTriggered: now = new Date() }
+    property real dayGone: (now.getHours() * 60 + now.getMinutes()) / 1440
+    property bool several: (panes.list || []).filter((p) => !p.devtools).length > 1
+
+    background: Stack {
+        property string bg: (pane.data && pane.data.bg) || fallback
+        property string media: bg === "media" && pane.data ? pane.data.media || "" : ""
+        property string mediaKind: pane.data && pane.data.mediaKind || "image"
+        property real strength: pane.focused || !several || alone || pane.devtools ? 1 : 0.6
+        property bool alone: !!pane.zoomed || !!pane.fullscreen
+        property var own: pane.data || ({})
+        property real mediaDim: Math.max(0, Math.min(1, typeof own.dim === "number" ? own.dim : dimDefault))
+        property real mediaBlur: Math.max(0, typeof own.blur === "number" ? own.blur : blurDefault)
+        Shader {
+            visible: bg === "contour"; source: "shaders/contour.metal"; running: motion && bg === "contour"; fps: 24
+            colors: [light ? "#1c141413" : "#18faf9f5", clay]
+            params: [14, 260, 0.010 + pane.index * 0.002, 0.7, 0.5]
+            opacity: strength; animate: 400
+        }
+        Shader {
+            visible: bg === "paper"; source: "shaders/paper.metal"; running: false
+            colors: ["#00000000", glow]
+            params: [0.8 * strength, 0.5, 0.35, 0]
+        }
+        Shader {
+            visible: bg === "daylight"; source: "shaders/halftone.metal"; running: false
+            colors: [clay, heather, hairline]
+            params: [dayGone, 7, 0.86]
+            opacity: 0.22 * strength; animate: 400
+        }
+        Stack {
+            visible: bg === "ink"; halign: "right"; valign: "bottom"; padding: 24
+            Stack {
+                width: 180; height: 180
+                Shader {
+                    source: "shaders/vessel.metal"; running: motion && bg === "ink"; fps: 24
+                    params: [0.35 + 0.3 * (pane.index % 3) / 2, 0.6, 1]
+                    colors: [clay, "#c46686", manilla, hairline, "#00000000"]
+                    opacity: 0.32 * strength; animate: 400
+                }
+            }
+        }
+        Stack {
+            visible: bg === "spark"; halign: "right"; valign: "bottom"; padding: 20
+            Stack {
+                width: 220; height: 220
+                Shader {
+                    source: "shaders/spark.metal"; running: motion && bg === "spark"; fps: 24
+                    colors: [clay, kraft]; params: [12, 0, 0.6, 1]
+                    opacity: 0.16 * strength; animate: 400
+                }
+            }
+        }
+        Image {
+            visible: bg === "image" && !!picture; source: picture; fit: "cover"
+            playing: bg === "image"
+            opacity: (1 - mediaDim) * strength; animate: 400; blur: mediaBlur
+        }
+        Image {
+            visible: !!media && mediaKind === "image"; source: mediaKind === "image" ? media : ""; fit: "cover"
+            opacity: (1 - mediaDim) * strength; animate: 400; blur: mediaBlur
+        }
+        Video {
+            visible: !!media && mediaKind === "video"; source: mediaKind === "video" ? media : ""; fit: "cover"
+            muted: true; loop: true
+            opacity: (1 - mediaDim) * strength; animate: 400; blur: mediaBlur
+        }
+    }
+
+    overlay: Stack {
+        property bool lit: pane.focused && several && !pane.devtools && !pane.zoomed && !pane.fullscreen
+        Rectangle {
+            radius: 12; shape: pane.shape || ""; color: "transparent"
+            border.width: lit ? 1.5 : 1; border.color: lit ? clay : hairline; colorAnimation: 280
+        }
+        Shader {
+            visible: !!pane.spotlight; running: !!pane.spotlight
+            opacity: pane.spotlight ? 1 : 0; opacityAnimation: 220
+            source: "shaders/beacon.metal"; colors: [clay, light ? "#c6613f" : "#f4c7a8"]; params: [12, 2.5, 0.3]
+        }
+        Row {
+            halign: "left"; valign: "top"; horizontalPadding: 18
+            Rectangle { width: lit ? 32 : 0; height: 3; radius: 1.5; color: clay; animate: 360; easing: "standard" }
+        }
+    }
+}

@@ -1,0 +1,311 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+use "components"
+
+MouseArea {
+    id: sq
+    focusable: true; focusRing: false
+    property bool light: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var pal: "0f0f10 17181a 1e2024 26282d 0a0a0b 33363c 4a4e56 f0f0f2 a8abb2 7f828a 44474d ebebeb 141519".split(" ").map((c) => "#" + c)
+    property var surface: pal[0]
+    property var container: pal[1]
+    property var containerHigh: pal[2]
+    property var containerHighest: pal[3]
+    property var well: pal[4]
+    property var hairline: pal[5]
+    property var lineHot: pal[6]
+    property var ink: pal[7]
+    property var inkDim: pal[8]
+    property var caption: pal[9]
+    property var faint: pal[10]
+    property var paper: pal[11]
+    property var onPaper: pal[12]
+    property var charcoal: "#383838"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? (light ? "#141519" : "#d9d9d9") : "#fffa00"
+    property var onSignal: accentName === "grey" && light ? "#f6f6f3" : accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var primary: !light ? (accentName === "wuling" ? "#14d0d0" : signal) : accentName === "wuling" ? "#046b6b" : accentName === "grey" ? "#34363d" : "#6b5d00"
+    property var orange: light ? "#c85a00" : "#ff7a1a"
+    property var green: light ? "#2e7d32" : "#7be04b"
+    property var blue: light ? "#1565c0" : "#4fa8ff"
+    property var red: light ? "#b3142b" : "#d91e36"
+    property var magenta: "#ff1aac"
+    property var mint: "#00ffa2"
+    property var teal: "#06a2a2"
+    property var lime: light ? "#6e8a00" : "#bce41d"
+    property var valley: "#fffa00"
+    property string cut: "square, cut 10, square, cut 10"
+    property string cutLarge: "square, cut 16, square, cut 16"
+    property string cutButton: "square, cut 7, square, cut 7"
+    property string cutPlate: "square, cut 6, square, cut 6"
+    property string fontUi: "HarmonyOS Sans"
+    property string fontWide: "Saira"
+    property string fontNum: "Space Grotesk"
+    property string fontMono: "Iosevka"
+    property string logoOpt: conf.values["endfield-logo"] || "game"
+    property string brandDir: "~/.config/rex/distros/endfield/assets/brand/"
+    property string logo: logoOpt === "emblem" ? "" : logoOpt === "game" ? brandDir + "tri-" + (light ? "ink" : accentName === "valley" ? "signal" : "white") + ".png" : logoOpt
+    property string wordmark: logoOpt === "game" ? brandDir + "wordmark-" + (light ? "ink" : "white") + ".png" : ""
+    property bool motion: conf.values["endfield-motion"] !== "false"
+    function caps(s) { return String(s).toUpperCase(); }
+    function two(n) { return (n < 10 ? "0" : "") + n; }
+    property var items: []
+    property var act: null
+    property bool compact: false
+    property bool showQuiet: false
+    property real now: Date.now()
+    property bool active: false
+    signal reveal(y, h)
+    signal escaped
+    property bool keysUsed: false
+    Timer { id: focusAgain; interval: 350; running: false; repeat: false; onTriggered: if (sq.active && !findField.focused) sq.forceActiveFocus() }
+    onActiveChanged: {
+        if (active) { forceActiveFocus(); focusAgain.restart(); if (!sel && flat.length) sel = flat[0].block; }
+        else if (!initial) { sel = ""; searching = false; keysUsed = false; }
+    }
+    onClicked: forceActiveFocus()
+    onKeyPressed: return keyed(key, mods, text)
+    property string paneKey: panes.list.map((p) => p.id + "#" + p.index).join(",")
+    property var shown: paneKey ? paneKey.split(",").map((e) => e.split("#")[0]) : []
+    property var paneNo: paneKey ? paneKey.split(",").reduce((m, e) => { const [id, n] = e.split("#"); m[id] = Number(n); return m }, {}) : ({})
+    property string spot: ""
+    property string spotWant: ""
+    onSpotWantChanged: { if (!spotWant || spotWant === under) { spotWait.stop(); spot = spotWant; } else spotWait.restart(); }
+    Timer { id: spotWait; interval: 120; running: false; repeat: false; onTriggered: spot = spotWant }
+    onSpotChanged: debug.spotlight(spot)
+    function rank(s) { return s === "blocked" ? 0 : s === "error" ? 1 : s === "working" ? 2 : s === "done" ? 3 : 4 }
+    function tint(s) { return s === "blocked" ? orange : s === "error" ? red : s === "working" ? lime : s === "done" ? green : caption }
+    function name(a) {
+        const t = /^[^@\s]+@[^:\s]+:/.test(a.title || "") ? "" : a.title
+        return a.statusTitle || t || a.process || qsTr("Terminal")
+    }
+    function why(a) {
+        if (a.message) return a.message
+        if (a.status === "blocked")
+            return a.waitReason === "permission" ? qsTr("Waiting for your permission") : a.waitReason === "question" ? qsTr("Asking you something")
+                 : a.waitReason === "authentication" ? qsTr("Waiting to sign in") : qsTr("Waiting on you")
+        if (a.status === "error") return a.lastExit != null ? qsTr("Exited with %1", a.lastExit) : qsTr("Failed")
+        if (a.status === "working") return a.progress > 0 ? qsTr("Working · %1%", Math.round(a.progress * 100)) : qsTr("Working")
+        if (a.status === "done") return qsTr("Done")
+        return qsTr("Standing by")
+    }
+    function home(p) { return String(p || "").replace(/^\/Users\/[^/]+/, "~") }
+    function where(a) {
+        const tab = /^Window [0-9a-f]+$/.test(a.tabLabel || "") ? "" : a.tabLabel || ""
+        return [tab ? caps(tab) : "", home(a.cwd)].filter((x) => x).join("  ·  ")
+    }
+    function ago(t) {
+        if (!t) return ""
+        const s = Math.max(0, (now - t) / 1000)
+        return s < 60 ? qsTr("now") : s < 3600 ? Math.floor(s / 60) + "m" : s < 86400 ? Math.floor(s / 3600) + "h" : Math.floor(s / 86400) + "d"
+    }
+    property real recentMs: 10 * 60 * 1000
+    function near(a) {
+        if (shown.indexOf(a.block) >= 0) return 1
+        return a.updatedAt && now - a.updatedAt < recentMs ? 0 : 2
+    }
+    function numberOf(a) { const n = paneNo[a.block]; return n == null ? 0 : n }
+    property string under: ""
+    Timer { id: underWait; interval: 300; running: false; repeat: false; onTriggered: under = "" }
+    function hoverCard(block, on) {
+        if (on) { underWait.stop(); under = block; }
+        else if (under === block) underWait.restart();
+    }
+    property string sel: ""
+    property var kept: ({ at: {} })
+    onGroupsChanged: { const at = {}; let i = 0; for (const g of groups) for (const a of g.items) at[a.block] = i++; kept.at = at; }
+    onItemsChanged: {
+        if (under && !items.some((a) => a.block === under)) under = "";
+        if (sel && !items.some((a) => a.block === sel)) sel = "";
+    }
+    function sorted(list) {
+        const was = kept.at;
+        const at = (a) => { const k = was[a.block]; return k == null ? 1e9 : k }
+        return list.map((a, i) => ({ a: a, i: i, r: near(a) })).sort((x, y) => x.r - y.r
+            || (x.r === 1 ? numberOf(x.a) - numberOf(y.a) : 0) || at(x.a) - at(y.a) || x.i - y.i).map((x) => x.a)
+    }
+    property bool searching: false
+    property string query: ""
+    function names(a) { return [a.sessionLabel, /^Window [0-9a-f]+$/.test(a.tabLabel || "") ? "" : a.tabLabel, name(a), a.title].join(" ").toLowerCase() }
+    property var hits: !query ? items : items.filter((a) => names(a).indexOf(query.toLowerCase()) >= 0)
+    onFlatChanged: {
+        if (query && !flat.some((a) => a.block === sel)) { sel = flat.length ? flat[0].block : ""; if (sel) revealSel(); }
+        else if (active && !sel && flat.length) sel = flat[0].block;
+    }
+    property real searchH: 0
+    function search() { searching = true; findField.forceActiveFocus(); }
+    function clearSearch() { query = ""; findField.text = ""; }
+    function endSearch() { clearSearch(); searching = false; forceActiveFocus(); }
+    function leaveSearch() { searching = false; forceActiveFocus(); }
+    function step(d) { const f = flat; if (!f.length) return; const i = f.findIndex((a) => a.block === sel); sel = f[Math.max(0, Math.min(f.length - 1, i < 0 ? 0 : i + d))].block; revealSel(); }
+    function goSel() { const f = flat; const a = f.find((x) => x.block === sel) || f[0]; if (!a) return; sel = ""; searching = false; releaseFocus(); if (act) act(a); }
+    property bool quietOpen: showQuiet || !!query
+    property bool quietMade: false
+    onQuietOpenChanged: if (quietOpen) quietMade = true
+    property var groups: [
+        { title: qsTr("Needs you"), urgent: true, items: sorted(hits.filter((a) => rank(a.status) < 2)) },
+        { title: qsTr("Working"), items: sorted(hits.filter((a) => a.status === "working")) },
+        { title: qsTr("Done"), items: sorted(hits.filter((a) => a.status === "done")) },
+        { title: qsTr("Standby"), quiet: true, count: hits.filter((a) => rank(a.status) === 4).length, items: quietMade ? sorted(hits.filter((a) => rank(a.status) === 4)) : [] },
+    ].filter((g) => g.items.length || (g.quiet && g.count))
+
+    property var open: groups.filter((g) => g.items.length && (!g.quiet || quietOpen))
+    property var flat: open.flatMap((g) => g.items)
+    property real cardH: compact ? 72 : 86
+    property var heads: ({})
+    property bool qwerty: conf.values["endfield-squad-keys"] === "qwerty"
+    function toggleQuiet() {
+        if (showQuiet && open.some((g) => g.quiet && g.items.some((a) => a.block === sel))) {
+            const rest = open.filter((g) => !g.quiet);
+            sel = rest.length ? rest[rest.length - 1].items[rest[rest.length - 1].items.length - 1].block : "";
+        }
+        showQuiet = !showQuiet;
+    }
+    function keyed(key, mods, text) {
+        const m = String(mods || "");
+        if (m.indexOf("cmd") >= 0 || m.indexOf("ctrl") >= 0 || m.indexOf("alt") >= 0) return false;
+        if (findField.focused) return false;
+        let k = text && text.length === 1 && text > " " ? text : key;
+        if (k === "/") { search(); return true; }
+        if (k === "escape" || k === "esc") {
+            if (query) { clearSearch(); searching = false; return true; }
+            sel = ""; releaseFocus(); escaped(); return true;
+        }
+        const f = flat;
+        const i = f.findIndex((a) => a.block === sel);
+        keysUsed = true;
+        const moveKey = k === "up" || k === "down" || k === "left" || k === "right" || k === "h" || k === "g" || k === "G"
+            || k === (qwerty ? "j" : "t") || k === (qwerty ? "k" : "n") || k === (qwerty ? "l" : "s");
+        if (moveKey && !f.length && !quietOpen && groups.some((g) => g.quiet && g.count)) {
+            showQuiet = true;
+            const q = open.find((g) => g.quiet);
+            if (q && q.items.length) { sel = q.items[0].block; revealSel(); }
+            return true;
+        }
+        const to = (j) => { if (!f.length) return true; sel = f[Math.max(0, Math.min(f.length - 1, j))].block; revealSel(); return true; };
+        if (k === "z" || k === "tab") { toggleQuiet(); if (sel) revealSel(); return true; }
+        if (k === "down" || k === (qwerty ? "j" : "t")) return to(i < 0 ? 0 : i + 1);
+        if (k === "up" || k === (qwerty ? "k" : "n")) return to(i < 0 ? 0 : i - 1);
+        if (k === "g" || k === "home") return to(0);
+        if (k === "G" || k === "end") return to(f.length - 1);
+        if (k === "h" || k === "left" || k === "right" || k === (qwerty ? "l" : "s")) {
+            const back = k === "h" || k === "left";
+            const gi = open.findIndex((g) => g.items.some((a) => a.block === sel));
+            const next = gi < 0 ? 0 : gi + (back ? -1 : 1);
+            if (next >= open.length && !back) {
+                const q = groups.find((g) => g.quiet);
+                if (q && !showQuiet) { showQuiet = true; const g2 = open.find((g) => g.quiet); if (g2 && g2.items.length) { sel = g2.items[0].block; revealSel(); } }
+                return true;
+            }
+            if (next >= 0 && next < open.length) { sel = open[next].items[0].block; revealSel(); }
+            return true;
+        }
+        if ((k === "enter" || k === "return" || k === "space" || k === " ") && i >= 0) { const a = f[i]; sel = ""; releaseFocus(); if (act) act(a); return true; }
+        return false;
+    }
+    function revealSel() {
+        let y = searching || query ? searchH + 16 : 0, first = true;
+        for (const g of groups) {
+            if (!first) y += 16;
+            first = false;
+            y += (heads[g.title] || 22) + 6;
+            const shownCards = g.items.length && (!g.quiet || quietOpen);
+            const k = shownCards ? g.items.findIndex((a) => a.block === sel) : -1;
+            if (k >= 0) { reveal(y + k * (cardH + 6), cardH); return; }
+            y += shownCards ? g.items.length * (cardH + 6) - 6 : -6;
+        }
+    }
+
+    Column {
+        spacing: 16
+        Rectangle {
+            visible: sq.searching || !!sq.query; appear: motion ? "wipe" : ""; appearDuration: 200
+            onLayoutHeightChanged: sq.searchH = layoutHeight
+            shape: cutButton; color: well; horizontalPadding: 10; verticalPadding: 6; colorAnimation: 140
+            border.width: 1; border.color: findField.focused ? signal : lineHot
+            Row { spacing: 8
+                Text { text: "/"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 12; color: primary }
+                TextField { id: findField; grow: 1; arrows: true; text: sq.query; placeholder: qsTr("Session, tab or name"); font.family: fontMono; font.mono: true; font.size: 12; color: ink
+                    onTextChanged: sq.query = text; onArrow: sq.step(direction === "down" ? 1 : -1); onAccepted: sq.goSel(); onCancelled: sq.endSearch()
+                    onKeyPressed: { if (key === "escape" || key === "esc") { sq.leaveSearch(); return true; } return false; } }
+                Text { text: two(sq.flat.length); font.family: fontNum; font.size: 11; font.tabular: true; color: sq.flat.length ? caption : orange } }
+        }
+        Text { visible: !!sq.query && !sq.flat.length; text: qsTr("Nothing by that name."); font.family: fontUi; font.size: 13; color: caption }
+        Text { visible: !sq.items.length; text: qsTr("No operators: every pane is quiet."); font.family: fontUi; font.size: 13; color: caption }
+        Grid {
+            columns: 1; spacing: 16
+            model: sq.groups; modelKey: "title"
+            delegate: Column {
+                spacing: 6
+                property var group: modelData
+                Row {
+                    spacing: 7
+                    onLayoutHeightChanged: { const h = Object.assign({}, sq.heads); h[group.title] = layoutHeight; sq.heads = h; }
+                    Text { visible: !!group.urgent; text: "!!!"; font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 10; color: orange }
+                    Text { text: caps(group.title); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 10; font.letterSpacing: 1.2; color: group.quiet ? caption : group.urgent ? orange : primary }
+                    Text { text: two(group.quiet ? group.count : group.items.length); font.family: fontNum; font.size: 11; font.tabular: true; color: caption }
+                    Rectangle { grow: 1; height: 1; color: hairline }
+                    Stack {
+                        visible: !!group.quiet; width: 78; height: 22
+                        Rectangle {
+                            shape: cutPlate; color: sq.quietOpen ? signal : quietHit.hovered ? alpha(signal, 0.07) : "transparent"; colorAnimation: 180
+                            border.width: 1; border.color: sq.quietOpen || quietHit.hovered ? signal : lineHot
+                            Shader { opacity: quietHit.hovered ? 1 : 0; animate: 180; source: "shaders/hatch.metal"; running: motion && quietHit.hovered; fps: 60
+                                params: [45, 7, 0.3, motion ? 16 : 0, 0, 0]; colors: [alpha(sq.quietOpen ? onSignal : signal, 0.14)] }
+                            Item { halign: "center"; valign: "center"
+                                Row { spacing: 6
+                                    Icon { name: "chevron.down"; font.size: 9; transform.rotation: sq.quietOpen ? 180 : 0; animate: motion ? 240 : 0; easing: "expo"
+                                        color: sq.quietOpen ? onSignal : quietHit.hovered ? primary : ink; colorAnimation: 180 }
+                                    Stack {
+                                        Text { opacity: sq.quietOpen ? 0 : 1; animate: 160; text: caps(qsTr("Show")); font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 10; font.letterSpacing: 1.1; color: quietHit.hovered ? primary : ink; colorAnimation: 180 }
+                                        Text { opacity: sq.quietOpen ? 1 : 0; animate: 160; text: caps(qsTr("Hide")); font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 10; font.letterSpacing: 1.1; color: onSignal } } } }
+                        }
+                        Button { id: quietHit; stateLayer: false; tip: qsTr("Show or hide Standby"); tipKeys: "z"; onClicked: sq.toggleQuiet() }
+                    }
+                }
+                Grid {
+                    columns: 1; spacing: 6
+                    expanded: !group.quiet || sq.quietOpen; collapse: true; animate: motion ? 260 : 0; easing: "expo"
+                    model: group.items; modelKey: "block"
+                    delegate: Stack {
+                        appear: motion ? "fade" : ""; appearDuration: 180; appearDelay: Math.min(index, 8) * 30
+                        disappear: motion ? "fade" : ""; disappearDuration: 140
+                        animate: motion ? 220 : 0; easing: "expo"
+                        property bool hover: cardHit.hovered
+                        property bool picked: sq.sel === modelData.block && (sq.focused || sq.searching)
+                        property bool hot: hover || picked
+                        property bool here: sq.shown.indexOf(modelData.block) >= 0
+                        onLayoutHeightChanged: if (layoutHeight > 0) sq.cardH = layoutHeight
+                        onHoverChanged: sq.hoverCard(modelData.block, hover)
+                        property bool lit: hot && here && (hover || sq.keysUsed)
+                        onLitChanged: { if (lit) sq.spotWant = modelData.block; else if (sq.spotWant === modelData.block) sq.spotWant = ""; }
+                        onHereChanged: { if (!here && sq.spotWant === modelData.block) sq.spotWant = ""; else if (here && hot) sq.spotWant = modelData.block; }
+                        Rectangle { shape: cut; color: hot ? containerHigh : container; colorAnimation: 90
+                            border.width: hot && here ? 1.5 : 1; border.color: hot ? (here ? signal : lineHot) : hairline }
+                        Row {
+                            Rectangle { width: 3; height: sq.compact ? 70 : 84; color: sq.tint(modelData.status) }
+                            Row {
+                                grow: 1; spacing: 12; padding: 8
+                                Brackets { width: (sq.compact ? 76 : 104) + 6; height: (sq.compact ? 50 : 64) + 6; arm: 7; weight: 1.5; tint: hot && here ? signal : alpha(sq.tint(modelData.status), hot ? 1 : 0.8)
+                                    Item { padding: 3; PanePreview { width: sq.compact ? 76 : 104; height: sq.compact ? 50 : 64; block: modelData.block; fit: "cover" } } }
+                                Column {
+                                    grow: 1; spacing: 3
+                                    Row { spacing: 8
+                                        Text { grow: 1; text: caps(sq.name(modelData)); font.family: fontWide; font.width: "expanded"; font.weight: "semibold"; font.size: 11; font.letterSpacing: 0.8; color: hot ? primary : modelData.status === "idle" ? inkDim : ink; colorAnimation: 90; maxLines: 1 }
+                                        Rectangle { visible: here; shape: cutPlate; horizontalPadding: 5; verticalPadding: 1; color: hot ? signal : "transparent"; colorAnimation: 90
+                                            border.width: 1; border.color: hot ? signal : lineHot
+                                            Text { text: caps(qsTr("This tab")); font.family: fontMono; font.mono: true; font.weight: "bold"; font.size: 8; font.letterSpacing: 0.6; color: hot ? onSignal : inkDim; colorAnimation: 90 } }
+                                        Text { text: sq.ago(modelData.updatedAt); font.family: fontMono; font.mono: true; font.size: 9; color: caption } }
+                                    Text { text: sq.why(modelData); font.family: fontUi; font.size: 12; color: modelData.status === "blocked" || modelData.status === "error" ? sq.tint(modelData.status) : inkDim; maxLines: 1 }
+                                    Gauge { compact: true; segments: 12; thickness: 4; value: modelData.status === "done" ? 1 : modelData.status === "working" ? (modelData.progress || 0.04) : 0; tint: sq.tint(modelData.status) }
+                                    Text { visible: !!sq.where(modelData); text: sq.where(modelData); font.family: fontMono; font.mono: true; font.size: 8.5; font.letterSpacing: 0.4; color: caption; maxLines: 1 }
+                                }
+                            }
+                        }
+                        Button { id: cardHit; stateLayer: false; onClicked: if (sq.act) sq.act(modelData) }
+                    }
+                }
+            }
+        }
+    }
+}

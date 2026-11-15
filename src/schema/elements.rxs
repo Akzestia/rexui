@@ -1,0 +1,571 @@
+# Copyright (c) 2026-present アクゼスティア
+# SPDX-License-Identifier: LicenseRef-rexui-1.0
+group visual {
+    width: real? = unset  measure
+    height: real? = unset  measure
+    visible: bool = true  measure
+    opacity: real = 1  paint
+    grow: real = 0  measure
+    animate: real = 0  paint
+    easing: enum(standard|expo|rex|bezier *|spring *) = ""  paint
+    colorAnimation: real = 0  paint
+    opacityAnimation: real = 0  paint
+    expanded: bool = true  measure
+    expandFrom: enum(top|bottom) = "top"  measure
+    collapse: bool = false  measure
+    tip: string = ""  paint
+    tipKeys: string = ""  paint
+    appear: enum(flicker|wipe|fade) = ""  paint
+    appearDelay: real = 0  paint
+    appearDuration: real = 0  paint
+    dropFiles: bool = false  measure
+    dropHovered: bool = false  measure
+    shrink: real? = unset  measure
+    minWidth: real? = unset  measure
+    maxWidth: real? = unset  measure
+    minHeight: real? = unset  measure
+    maxHeight: real? = unset  measure
+    columnSpan: real? = unset  measure
+    layoutWidth: real = 0  measure js
+    layoutHeight: real = 0  measure js
+    transform.x: real? = unset  paint
+    transform.y: real? = unset  paint
+    transform.scale: real? = unset  paint
+    transform.rotation: real? = unset  paint
+    z: real? = unset  paint
+    disappear: enum?(flicker|wipe|fade) = unset  paint
+    disappearDuration: real? = unset  paint
+    tabIndex: real? = unset  measure
+    moveKey: string? = unset  paint
+}
+
+group box : visual {
+    padding: real = 0  measure
+    horizontalPadding: real? = unset  measure
+    verticalPadding: real? = unset  measure
+    spacing: real = 0  measure
+    halign: enum?(left|center|right|stretch) = unset  measure
+    valign: enum?(top|center|bottom|stretch) = unset  measure
+    color: color = ""  paint
+    radius: real = 0  paint
+    border.color: color = ""  paint
+    border.width: real = 0  paint
+    shape: string = ""  measure
+    border.dash: list = fn []  paint
+    border.dashSpeed: real = 0  paint
+    border.start: real = 0  paint
+    border.end: real = 1  paint
+    detachHidden: bool = false  measure
+    reorder: string = ""  measure
+    clips: any = unset  paint
+    gradient: any = unset  paint
+    gradientAngle: real? = unset  paint
+    shadow.color: any = unset  paint
+    shadow.radius: real? = unset  paint
+    shadow.x: real? = unset  paint
+    shadow.y: real? = unset  paint
+    backdropBlur: real? = unset  paint
+}
+
+group font {
+    font.size: real = 13  measure
+    font.bold: bool = false  measure
+    font.weight: enum(thin|ultralight|light|regular|medium|semibold|bold|heavy|black) = ""  measure
+    font.family: string = ""  measure
+    font.mono: bool = false  measure
+    font.italic: bool = false  measure
+    font.tabular: bool = false  measure
+    font.letterSpacing: real = 0  measure
+    font.width: enum(compressed|condensed|standard|expanded) = ""  measure
+}
+
+type Slot {
+    name: string = ""  measure js
+}
+
+type MouseArea : box {
+    enabled: bool = true  measure
+    cursor: enum(resizeLeftRight|resizeUpDown|pointer|move|crosshair|arrow|text) = ""  measure
+    trackMouse: bool = false  measure
+    hovered: bool = false  measure js
+    pressed: bool = false  measure js
+    mouseX: real = 0  measure js
+    mouseY: real = 0  measure js
+    focusable: bool = false  measure
+    focusRing: bool = true  measure
+    focused: bool = false  measure js
+    autofocus: bool = false  measure
+    dragData: any = unset  measure
+    dragKey: string? = unset  measure
+    dragText: string? = unset  measure
+    dragFile: any = unset  measure
+    dragActive: bool = false  measure js
+    dropKeys: list = fn []  measure
+    signals: press(x, y, button, mods), release(x, y, button, mods), clicked(x, y, button, mods), doubleClicked(x, y, button, mods), longPressed(x, y), entered(), exited(), moved(x, y), dragged(dx, dy, x, y), dropped(dx, dy), wheel(dx, dy, mods), keyPressed(key, mods, text), keyReleased(key, mods), dragStarted(), dragEnded(accepted), dragEntered(data, key), dragExited(), dragMoved(x, y), drop(data, key, x, y)
+    methods: forceActiveFocus, releaseFocus
+}
+
+type Dock : box {
+    side: enum(right|left|top|bottom|bottom-left|bottom-right|top-left|top-right) = "right"  measure
+    key: string = ""  measure
+    groupKey: string = ""  measure
+    animation: real = 220  measure
+    group: string = ""  measure
+    title: string = ""  measure
+    icon: string = ""  measure
+    iconColor: color = ""  measure
+    bar: enum(bottom|top|none|float) = "bottom"  measure
+    barKey: string = ""  measure
+    barColor: color = ""  measure
+    searchKey: string = ""  measure
+    search: string = ""  measure
+    searchColor: color = ""  measure
+    span: enum(panes|window) = "panes"  measure
+    resizable: bool = true  measure
+    tileRadius: real = 10  measure
+    iconInk: color = ""  measure
+    barRadius: real = 18  measure
+    tileShape: string = ""  measure
+    tileFill: string = ""  measure
+    tileActive: string = ""  measure
+    tileActiveInk: string = ""  measure
+    barShape: string = ""  measure
+    accent: color = ""  measure
+    margin: real = 12  measure
+    reveal: real = 0  measure
+    keyTitle: string = ""  measure
+    transition: enum(slide|melt) = "slide"  measure
+    iconFly: bool = false  measure
+    signals: notice(notice), focusEdge(direction), link(url), paste(text, block, session), window(window), activityToggle(), filesChanged(path), reveal(paths)
+}
+
+type Panes {
+    radius: real = -1  measure
+    shape: string = ""  measure
+    animation: real = 300  measure
+    margin: real = 0  measure
+    rexBorder: bool = false  measure
+    spotlight: bool = true  measure
+    hole: object = fn {}  measure
+    model: list = fn []  measure js
+    objects: background, overlay
+}
+
+type Column : box {
+}
+
+type Row : box {
+    flow: any = unset  measure
+    rowSpacing: real? = unset  measure
+}
+
+type Stack : box {
+    model: list = fn []  measure js
+    modelKey: any = unset  measure js
+    objects: delegate
+}
+
+type Item : box {
+}
+
+type Rectangle : box {
+}
+
+type Text : visual {
+    text: string = ""  measure
+    selectable: bool = false  measure
+    selectionGroup: string = ""  measure
+    selectedText: string = ""  measure js
+    color: color = ""  paint
+    ...font
+    font.underline: any = unset  measure
+    font.strikeout: any = unset  measure
+    lineHeight: real? = unset  measure
+    spans: any = unset  measure
+    wrap: bool = false  measure
+    maxLines: real = 0  measure
+    align: enum(left|center|right) = "left"  measure
+    syntax: string = ""  measure
+    syntaxColors: object = fn {}  measure
+    glow: color = ""  paint
+    glowRadius: real = 6  paint
+    outline: real = 0  paint
+    outlineColor: color = ""  paint
+    scramble: real = 0  paint
+    scrambleSet: string = ""  paint
+    signals: linkActivated(url)
+}
+
+type Image : visual {
+    source: string = ""  measure
+    radius: real = 0  measure
+    fit: enum(cover|contain|fill) = "cover"  measure
+    color: color = ""  paint
+    shape: string = ""  measure
+    spin: real = 0  measure
+    playing: bool = true  measure
+    speed: real = 1  measure
+    blur: real = 0  paint
+    status: string = ""  measure js
+    signals: loaded(), failed(error)
+}
+
+type Icon : visual {
+    name: string = ""  measure
+    color: color = ""  paint
+    font.size: real = 13  measure
+    font.bold: bool = false  measure
+}
+
+type TabPreview : visual {
+    tab: real = 0  measure
+    radius: real = 0  measure
+    zoom: real = 0  measure
+    session: string = ""  measure
+    interactive: bool = false  measure
+    command: list = fn []  measure
+    cwd: string = ""  measure
+}
+
+type Button {
+    dragFile: string = ""  measure
+    ...visual
+    text: string = ""  measure
+    icon: string = ""  measure
+    color: color = ""  paint
+    ...font
+    style: enum(plain|bordered) = ""  measure
+    enabled: bool = true  measure
+    hovered: bool = false  measure js
+    pressed: bool = false  measure js
+    stateLayer: bool = true  measure
+    stateColor: string = ""  measure
+    stateRadius: real = -1  measure
+    drag: bool = false  measure
+    cursor: enum(resizeLeftRight|resizeUpDown|pointer|move|crosshair|arrow|text) = ""  measure
+    shape: string = ""  measure
+    focusable: bool = true  measure
+    focusRing: bool = true  measure
+    focused: bool = false  measure js
+    dragData: any = unset  measure
+    dragKey: string? = unset  measure
+    dragText: string? = unset  measure
+    dragActive: bool = false  measure js
+    signals: clicked(), doubleClicked(), keyRecorded(key), dragged(dx, dy), dropped(dx, dy), rightClicked(), keyPressed(key, mods, text), keyReleased(key, mods), dragStarted(), dragEnded(accepted)
+    methods: recordKey, forceActiveFocus, releaseFocus
+}
+
+type Slider : visual {
+    value: real = 0  paint
+    from: real = 0  paint
+    to: real = 1  paint
+    enabled: bool = true  measure
+    step: real? = unset  paint
+    color: any = unset  paint
+    trackColor: any = unset  paint
+    knobColor: any = unset  paint
+    focusable: bool = true  measure
+    focusRing: bool = true  measure
+    focused: bool = false  measure js
+    signals: moved(value), released(value), keyPressed(key, mods, text), keyReleased(key, mods)
+    methods: forceActiveFocus, releaseFocus
+}
+
+type Visualiser : visual {
+    values: list = fn []  paint
+    frames: string = ""  paint
+    bars: real = 60  measure
+    color: color = ""  paint
+    shape: string = "circle"  measure
+    cover: real = 0  measure
+    gap: real = 12  measure
+    barWidth: real? = unset  measure
+    spin: real = 0  measure
+}
+
+type Canvas : visual {
+    draw: list = fn []  paint
+    frames: string = ""  paint
+}
+
+type Graph : visual {
+    values: list = fn []  paint
+    frames: string = ""  paint
+    style: enum(line|area|bars) = "line"  paint
+    color: color = ""  paint
+    min: real? = unset  paint
+    max: real? = unset  paint
+    thickness: real = 1.5  paint
+    gap: real = 1  paint
+}
+
+type Shapes : visual {
+    count: real = 14  measure
+    colors: list = fn []  measure
+    opacities: list = fn []  measure
+    shapes: list = fn []  measure
+    minSize: real = 36  measure
+    maxSize: real = 124  measure
+    minSpeed: real = 4  measure
+    maxSpeed: real = 18  measure
+    turn: real = 12  measure
+    moving: bool = true  measure
+}
+
+type PanePreview : visual {
+    block: string = ""  measure
+    radius: real = 0  measure
+    fit: enum(cover|contain|fill) = "contain"  measure
+}
+
+type Video : visual {
+    source: string = ""  measure
+    playing: bool = true  measure
+    loop: bool = true  measure
+    muted: bool = true  measure
+    rate: real = 1  measure
+    fit: enum(cover|contain|fill) = "cover"  measure
+    radius: real = 0  measure
+    shape: string = ""  measure
+    color: color = ""  paint
+    blur: real = 0  paint
+    status: string = ""  measure js
+    position: real = 0  measure js
+    duration: real = 0  measure js
+    signals: ended(), failed(error)
+    methods: seek
+}
+
+type Path : visual {
+    d: string = ""  paint
+    units: enum(box|pt) = "box"  measure
+    stroke: color = ""  paint
+    strokeWidth: real = 1  paint
+    fill: color = ""  paint
+    dash: list = fn []  paint
+    dashSpeed: real = 0  paint
+    start: real = 0  paint
+    end: real = 1  paint
+    cap: enum(butt|round|square) = "butt"  paint
+    join: enum(miter|round|bevel) = "miter"  paint
+}
+
+type Shader : visual {
+    source: string = ""  measure
+    code: string = ""  measure
+    params: list = fn []  paint
+    colors: list = fn []  paint
+    running: bool = true  measure
+    fps: real = 60  measure
+    scale: real = 1  measure
+    radius: real = 0  measure
+    shape: string = ""  measure
+    error: string = ""  measure js
+    paramsAnimation: real = 0  measure
+    frames: string = ""  measure
+    image: string = ""  measure
+    feedback: bool = false  measure
+    passes: list = fn []  measure
+}
+
+type Arc : visual {
+    value: real = 0  paint
+    start: real = -90  paint
+    sweep: real = 360  paint
+    thickness: real = 6  paint
+    color: color = ""  paint
+    track: color = ""  paint
+    gap: real = 8  paint
+    wavy: bool = false  measure
+    waves: real = 8  measure
+    waving: bool = true  measure
+    wavePeriod: real = 2000  measure
+    dot: bool = true  measure
+    line: bool = false  measure
+    seekable: bool = false  measure
+    signals: moved(value), released(value)
+}
+
+type Process {
+    command: list = []  measure
+    running: bool = true  measure
+    restart: bool = true  measure
+    state: object = fn {}  measure js
+    signals: message(message), exited(code)
+    methods: send, call
+}
+
+type Timer {
+    interval: real = 1000  measure
+    running: bool = true  measure
+    repeat: bool = true  measure
+    aligned: bool = false  measure
+    signals: triggered()
+    methods: start, stop, restart
+}
+
+type Shortcut {
+    key: string = ""  measure
+    keyTitle: string = ""  measure
+    enabled: bool = true  measure
+    signals: activated()
+}
+
+type FileDialog {
+    title: string = ""  measure
+    types: list = fn []  measure
+    folder: string = ""  measure
+    mode: enum?(open|save|folder) = unset  measure
+    multiple: any = unset  measure
+    name: string? = unset  measure
+    signals: accepted(path), acceptedAll(paths), rejected()
+    methods: open
+}
+
+type Drawer : box {
+    open: bool = false  measure
+    key: string = ""  measure
+    hover: bool = false  measure
+    animation: real = 500  measure
+    rounding: real = 25  measure
+    placement: enum(edge|center|top|pointer|side|pane) = "edge"  measure
+    command: list = fn []  measure
+    resizable: bool = true  measure
+    movable: bool = true  measure
+    shift: real = 0  measure
+    keyTitle: string = ""  measure
+    exclusive: string = ""  measure
+    flare: enum(round|cut|none) = "round"  measure
+    opening: enum(drop|grow) = "drop"  measure
+    closeAnimation: real = -1  measure
+    lazy: bool = false  measure js
+    signals: opened(), closed(), commanded(name)
+}
+
+type Loader : box {
+    active: bool = true  measure js
+    source: string = ""  measure js
+    ready: bool = false  measure js
+    loadNow: bool = false  measure js
+    objects: delegate
+    signals: loaded()
+}
+
+type Pages : box {
+    current: real = 0  measure
+    animation: real = 500  measure
+}
+
+type Grid : box {
+    columns: real = 2  measure
+    columnWidths: any = unset  measure
+    minColumnWidth: real? = unset  measure
+    model: list = fn []  measure js
+    modelKey: any = unset  measure js
+    objects: delegate
+}
+
+type List : box {
+    model: list = fn []  measure js
+    modelKey: any = unset  measure js
+    follow: bool = false  measure
+    maxHeight: real = 0  measure
+    reveal: real = -1  measure
+    revealAlign: enum(center) = ""  measure
+    revealAnimation: real = 0  measure
+    fade: real = 0  measure
+    gutter: real = 10  measure
+    virtualized: bool = false  measure
+    rowHeight: real = 0  measure
+    overscan: real = -1  measure
+    orientation: enum?(vertical|horizontal) = unset  measure
+    contentX: real? = unset  paint
+    contentY: real? = unset  paint
+    focusable: bool = false  measure
+    focusRing: bool = true  measure
+    focused: bool = false  measure js
+    objects: delegate
+    signals: window(first, count), scrolled(x, y), keyPressed(key, mods, text), keyReleased(key, mods)
+    methods: forceActiveFocus, releaseFocus, scrollTo
+}
+
+type Scroll : box {
+    orientation: enum?(vertical|horizontal) = unset  measure
+    contentX: real? = unset  paint
+    contentY: real? = unset  paint
+    follow: bool = false  measure
+    fade: real = 0  measure
+    gutter: real = 10  measure
+    signals: scrolled(x, y)
+    methods: scrollTo
+}
+
+type TextArea : visual {
+    text: string = ""  measure
+    color: color = ""  paint
+    font.size: real = 13  measure
+    font.bold: bool = false  measure
+    font.weight: string = ""  measure
+    font.family: string = ""  measure
+    font.mono: bool = true  measure
+    font.italic: bool = false  measure
+    font.tabular: bool = false  measure
+    font.letterSpacing: real = 0  measure
+    font.width: string = ""  measure
+    editable: bool = true  measure
+    wrap: bool = true  measure
+    source: string = ""  measure
+    follow: bool = false  measure
+    syntax: string = ""  measure
+    syntaxColors: object = fn {}  measure
+    autoPairs: bool = false  measure
+    focused: bool = false  measure js
+    cursorPosition: real = 0  measure js
+    selectionStart: real = 0  measure js
+    selectionEnd: real = 0  measure js
+    signals: edited(), saved(ok), found(ok), keyPressed(key, mods, text), keyReleased(key, mods)
+    methods: forceActiveFocus, releaseFocus, append, save, select, selectAll, insert, find
+}
+
+type TextField : visual {
+    text: string = ""  measure
+    placeholder: string = ""  measure
+    color: color = ""  paint
+    ...font
+    enabled: bool = true  measure
+    autofocus: bool = false  measure
+    arrows: bool = false  measure
+    autoPairs: bool = false  measure
+    syntax: string = ""  measure
+    syntaxColors: object = fn {}  measure
+    readOnly: any = unset  measure
+    secure: any = unset  measure
+    maxLength: real? = unset  measure
+    focused: bool = false  measure js
+    cursorPosition: real = 0  measure js
+    selectionStart: real = 0  measure js
+    selectionEnd: real = 0  measure js
+    signals: accepted(), cancelled(), arrow(direction), keyPressed(key, mods, text), keyReleased(key, mods)
+    methods: forceActiveFocus, releaseFocus, select, selectAll, insert
+}
+
+type WebView : visual {
+    cookies: string = ""  measure
+    storage: list = fn []  measure
+    adblock: bool = true  measure
+    css: string = ""  measure
+    url: string = ""  measure
+    search: string = ""  measure
+    zoom: real = 1  measure
+    lazy: bool = true  measure
+    suspend: real = 300  measure
+    title: string = ""  measure js
+    currentUrl: string = ""  measure js
+    loading: bool = false  measure js
+    canGoBack: bool = false  measure js
+    canGoForward: bool = false  measure js
+    favicon: string = ""  measure js
+    error: string = ""  measure js
+    signals: loaded(), failed(error), command(name)
+    methods: back, forward, reload, stop, load, adblockSettings, forceActiveFocus
+}

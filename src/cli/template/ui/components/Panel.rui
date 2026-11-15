@@ -1,0 +1,10 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Column {
+    id: panel
+    property string title: ""
+    padding: 12; spacing: 8; radius: 12
+    color: theme.dark ? "#12ffffff" : "#10000000"
+    Text { text: panel.title; font.bold: true }
+    Slot { }
+}

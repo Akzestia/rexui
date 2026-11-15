@@ -1,0 +1,79 @@
+// Copyright (c) 2026-present アクゼスティア
+// SPDX-License-Identifier: MIT
+Stack {
+    id: cap
+    property string key: ""
+    property bool small: false
+    property bool on: false
+    property bool inverse: false
+    property string accentName: conf.values["endfield-accent"] || "valley"
+    property var signal: accentName === "wuling" ? "#06a2a2" : accentName === "grey" ? "#d9d9d9" : "#fffa00"
+    property var onSignal: accentName === "wuling" ? "#ffffff" : "#0f0f10"
+    property var fg: on || inverse ? onSignal : "#f0f0f2"
+    property var fill: on ? signal : inverse ? "#14" + onSignal.slice(1) : "#9917181a"
+    property var edge: on ? signal : inverse ? "#8c" + onSignal.slice(1) : "#4a4e56"
+    function parts(k) {
+        k = String(k || "");
+        if (!k) return [];
+        const out = [];
+        if (/[⌃⌥⇧⌘]/.test(k) || (k.length <= 2 && k.indexOf("+") < 0)) {
+            const mods = { "⌃": "control", "⌥": "option", "⇧": "shift", "⌘": "command" };
+            const glyphs = { "↩": "return", "⌫": "delete.left", "⌦": "delete.right", "←": "arrow.left", "→": "arrow.right",
+                             "↑": "arrow.up", "↓": "arrow.down", "⇥": "arrow.right.to.line", "⎋": "escape", " ": "space" };
+            let i = 0;
+            while (i < k.length && mods[k[i]]) out.push({ sym: mods[k[i++]] });
+            const rest = k.slice(i);
+            if (rest) out.push(glyphs[rest] ? { sym: glyphs[rest] } : { text: rest.toUpperCase() });
+            return out;
+        }
+        const names = { pageup: "PG↑", pagedown: "PG↓", home: "HOME", end: "END" };
+        const syms = { space: "space", tab: "arrow.right.to.line", escape: "escape", esc: "escape", enter: "return", return: "return",
+                       backspace: "delete.left", delete: "delete.right", left: "arrow.left", right: "arrow.right", up: "arrow.up", down: "arrow.down" };
+        const ps = k.toLowerCase().split("+");
+        const key = ps.pop();
+        if (ps.includes("ctrl") || ps.includes("control")) out.push({ sym: "control" });
+        if (ps.includes("alt") || ps.includes("opt") || ps.includes("option")) out.push({ sym: "option" });
+        if (ps.includes("shift") && !"?!@#$%^&*()_+{}|:\"<>~".includes(key)) out.push({ sym: "shift" });
+        if (ps.includes("cmd") || ps.includes("command") || ps.includes("super")) out.push({ sym: "command" });
+        out.push(syms[key] ? { sym: syms[key] } : { text: names[key] || key.toUpperCase() });
+        return out;
+    }
+    property var caps: parts(key)
+    property var mods: caps.slice(0, -1)
+    property var last: caps.length ? caps[caps.length - 1] : null
+    property bool lastSquare: !!last && (!!last.sym || String(last.text).length === 1)
+    property real side: small ? 17 : 20
+    Row {
+        spacing: 3
+        Grid {
+            visible: cap.mods.length > 0; columns: Math.max(1, cap.mods.length); spacing: 3
+            model: cap.mods
+            delegate: Stack {
+                width: cap.side; height: cap.side
+                Rectangle {
+                    halign: "center"; valign: "center"
+                    color: cap.fill; colorAnimation: 120; border.width: 1; border.color: cap.edge
+                    Icon { name: modelData.sym || ""; font.size: cap.small ? 8.5 : 10; font.bold: true; color: cap.fg }
+                }
+                Column { valign: "bottom"; Rectangle { height: 2; color: cap.edge } }
+            }
+        }
+        Stack {
+            visible: !!cap.last; height: cap.side
+            Rectangle {
+                visible: cap.lastSquare
+                width: cap.side; halign: "center"; valign: "center"
+                color: cap.fill; colorAnimation: 120; border.width: 1; border.color: cap.edge
+                Icon { visible: !!cap.last && !!cap.last.sym; name: cap.last && cap.last.sym || ""; font.size: cap.small ? 8.5 : 10; font.bold: true; color: cap.fg }
+                Text { visible: !!cap.last && !cap.last.sym; text: cap.last && cap.last.text || ""; font.family: "Space Grotesk"; font.size: cap.small ? 10 : 11.5; font.weight: "bold"; color: cap.fg }
+            }
+            Rectangle {
+                visible: !cap.lastSquare
+                horizontalPadding: 6; valign: "center"
+                color: cap.fill; colorAnimation: 120; border.width: 1; border.color: cap.edge
+                Text { text: cap.last && cap.last.text || ""; font.family: "Space Grotesk"; font.size: cap.small ? 8 : 9; font.weight: "bold"; font.letterSpacing: 0.8; color: cap.fg }
+            }
+            Column { valign: "bottom"; Rectangle { height: 2; color: cap.edge } }
+        }
+    }
+}
