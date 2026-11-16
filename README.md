@@ -42,6 +42,9 @@ return {
 }
 ```
 
+> [!NOTE]
+> The language server wasn't handwritten so its kinda meh \~_\~
+
 # r/unixporn xD
 
 <div align='center'>
