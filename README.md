@@ -29,6 +29,19 @@ rexui load main
 > [!IMPORTANT]
 > Backends have **NO SANDBOX**! Please don't run random code from other repos w/o checking it 1st ty <3
 
+# NeoVim
+
+For highlights ^^
+
+```lua
+return {
+    dir = "~/rexui/tools/editor/nvim-rui", -- or wherever u have it
+    name = "nvim-rui",
+    lazy = false,
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
+}
+```
+
 # r/unixporn xD
 
 <div align='center'>
